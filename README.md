@@ -189,15 +189,13 @@ Respawn food on free tiles.
 
 👥 Contributors
 
-Update this section with your real team names.
+Guido He
 
-Radman – Backend, game logic, client integration
+Donghoon Oh
 
-Teammate 2 – Frontend UI/UX
+Radman Mohammadi
 
-Teammate 3 – Gameplay design & testing
-
-Teammate 4 – Documentation & polish
+Nathan Hilde
 
 🧰 Future Improvements
 
@@ -213,6 +211,3 @@ Persistent high scores & player stats
 
 This project is for educational and hackathon use.
 Feel free to fork and extend it for your own learning or projects.
-
-
-You can paste this directly into `README.md` and commit/push. Adjust the repo URL and C
