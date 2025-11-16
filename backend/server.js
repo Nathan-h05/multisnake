@@ -51,7 +51,7 @@ function generateFood(gridSize) {
 }
 
 // Initialize player state with distinct starting positions based on index
-function initPlayer(socketId, color, gridSize, playerIndex) {
+function initPlayer(socketId, color, gridSize, playerIndex, name) {
     const q = Math.floor(gridSize / 4); // Quarter distance
     const tq = Math.floor(gridSize * 3 / 4); // Three-quarter distance
 
@@ -91,6 +91,7 @@ function initPlayer(socketId, color, gridSize, playerIndex) {
     return {
         id: socketId.substring(0, 5),
         socketId: socketId,
+        name: name || socketId.substring(0, 5),
         color: color,
         score: 0,
         isAlive: true,
@@ -100,7 +101,7 @@ function initPlayer(socketId, color, gridSize, playerIndex) {
 }
 
 // Create the initial game state for a new room
-function createGameState(roomCode, hostId, gridSize) {
+function createGameState(roomCode, hostId, gridSize, hostName) {
     const playerColor = getAvailableColor({});
     const initialState = {
         roomCode: roomCode,
@@ -111,7 +112,7 @@ function createGameState(roomCode, hostId, gridSize) {
         food: generateFood(gridSize),
     };
     // Host is always player index 0
-    initialState.players[hostId] = initPlayer(hostId, playerColor, gridSize, 0); 
+    initialState.players[hostId] = initPlayer(hostId, playerColor, gridSize, 0, hostName); 
     return initialState;
 }
 
@@ -270,6 +271,7 @@ io.on('connection', (socket) => {
         
         // Extract and validate gridSize
         const requestedSize = (data && data.gridSize) ? parseInt(data.gridSize, 10) : DEFAULT_GRID_SIZE;
+        const hostName = data && data.name ? data.name : 'Player';
         let gridSize = Math.max(10, Math.min(60, requestedSize));
         gridSize = Math.floor(gridSize / 10) * 10; // Ensure multiple of 10
         
@@ -284,7 +286,7 @@ io.on('connection', (socket) => {
             return;
         }
 
-        const state = createGameState(roomCode, socket.id, gridSize);
+        const state = createGameState(roomCode, socket.id, gridSize, hostName);
         gameStates[roomCode] = state;
         socket.join(roomCode);
         
@@ -295,49 +297,56 @@ io.on('connection', (socket) => {
     });
 
 
-    socket.on('joinRoom', (roomCode, callback) => {
-        // Ensure roomCode is uppercase for consistent lookup
-        const code = roomCode.toUpperCase(); 
-        
-        // *** DEBUG LOG ***
+    socket.on('joinRoom', (data, callback) => {
+        // data = { roomCode, name }
+        const roomCode = data && data.roomCode ? data.roomCode : '';
+        const playerName = data && data.name ? data.name : 'Player';
+
+        const code = roomCode.toUpperCase();
+
         console.log(`[JOIN] User ${socket.id} attempting to join room: ${roomCode} (Look up key: ${code})`);
         console.log(`[JOIN] Available rooms for lookup: ${Object.keys(gameStates).join(', ')}`);
 
-
         const state = gameStates[code];
         if (!state) {
-            // *** DEBUG LOG ***
             console.log(`[JOIN FAIL] Room ${code} not found in state map.`);
-            callback({ success: false, message: `Room ${code} not found.` });
+            if (typeof callback === 'function') {
+                callback({ success: false, message: `Room ${code} not found.` });
+            }
             return;
         }
 
         if (state.gameState !== 'waiting') {
-            callback({ success: false, message: 'Game has already started.' });
+            if (typeof callback === 'function') {
+                callback({ success: false, message: 'Game has already started.' });
+            }
             return;
         }
 
         if (Object.keys(state.players).length >= 4) {
-            callback({ success: false, message: 'Room is full.' });
+            if (typeof callback === 'function') {
+                callback({ success: false, message: 'Room is full.' });
+            }
             return;
         }
 
-        // Determine the player index for the starting position
         const newPlayerIndex = Object.keys(state.players).length;
-
-        // Add player to the state
         const playerColor = getAvailableColor(state.players);
-        // Pass the player index to initPlayer
-        state.players[socket.id] = initPlayer(socket.id, playerColor, state.gridSize, newPlayerIndex); 
-        socket.join(code); // Join the correct, uppercase room
 
-        // *** DEBUG LOG ***
+        state.players[socket.id] =
+            initPlayer(socket.id, playerColor, state.gridSize, newPlayerIndex, playerName);
+
+        socket.join(code);
+
         console.log(`[JOIN SUCCESS] User ${socket.id} joined room ${code}`);
 
-        // Broadcast updated state to all users in the room
         io.to(code).emit('gameState', state);
-        callback({ success: true, state });
+        if (typeof callback === 'function') {
+            callback({ success: true, state });
+        }
     });
+
+
 
     socket.on('startGame', (roomCode) => {
         const state = gameStates[roomCode];
@@ -375,19 +384,22 @@ io.on('connection', (socket) => {
     socket.on('requestReset', (roomCode) => {
         const state = gameStates[roomCode];
         if (!state || state.hostId !== socket.id || state.gameState !== 'gameover') return;
-        
+
         console.log(`Resetting room ${roomCode}`);
-        
-        // Reset player states, keep existing players/colors
+
         const newPlayers = {};
-        
-        // Re-initialize players using their current index to get unique starting spots
+
         Object.keys(state.players).forEach((playerId, index) => {
-             const oldPlayer = state.players[playerId];
-             newPlayers[playerId] = initPlayer(playerId, oldPlayer.color, state.gridSize, index); // Pass index
+            const oldPlayer = state.players[playerId];
+            newPlayers[playerId] = initPlayer(
+                playerId,
+                oldPlayer.color,
+                state.gridSize,
+                index,
+                oldPlayer.name       // ⭐ keep player name
+            );
         });
 
-        // Create new state with existing players, new food, and waiting state
         const newState = {
             roomCode: roomCode,
             hostId: state.hostId,
@@ -400,6 +412,7 @@ io.on('connection', (socket) => {
         gameStates[roomCode] = newState;
         io.to(roomCode).emit('gameState', newState);
     });
+
 
     socket.on('disconnect', () => {
         console.log('User disconnected:', socket.id);

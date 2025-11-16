@@ -26,6 +26,13 @@
     <div id="home-screen" class="hidden max-w-sm mx-auto p-6 space-y-4">
         <h2 class="text-2xl font-bold text-center mb-4">Start or Join Game</h2>
 
+        <!-- Player Name Input -->
+        <div class="space-y-2 p-4 bg-slate-700 rounded-lg">
+            <label for="name-input" class="block font-semibold">Your Name</label>
+            <input type="text" id="name-input" class="input-field" maxlength="15" placeholder="Enter your name">
+        </div>
+
+
         <!-- Grid Size Input -->
         <div class="space-y-2 p-4 bg-slate-700 rounded-lg">
             <label for="grid-size-input" class="block font-semibold">Grid Size (Tiles)</label>
@@ -231,6 +238,8 @@ function connectToServer() {
 
 function handleCreateRoom() {
     const gridSize = parseInt(gridSizeInput.value, 10);
+    const name = nameInput.value.trim() || "Player";
+    userName = name;
 
     if (isNaN(gridSize) || gridSize < 10 || gridSize > 60 || gridSize % 10 !== 0) {
         showError("Grid size must be a number between 10 and 60, in multiples of 10.");
@@ -240,7 +249,7 @@ function handleCreateRoom() {
     createRoomBtn.disabled = true;
     
     // Send the desired grid size to the server
-    socket.emit('createRoom', { gridSize: gridSize }, (response) => {
+    socket.emit('createRoom', { gridSize: gridSize, name }, (response) => {
         createRoomBtn.disabled = false;
         if (response.success) {
             currentRoomCode = response.roomCode;
@@ -259,13 +268,16 @@ function handleCreateRoom() {
 
 function handleJoinRoom() {
     const roomCode = roomCodeInput.value.toUpperCase();
+    const name = nameInput.value.trim() || "Player";
+
+    userName = name;
     if (roomCode.length !== 4) {
         showError("Please enter a 4-letter room code.");
         return;
     }
     
     joinRoomBtn.disabled = true;
-    socket.emit('joinRoom', roomCode, (response) => {
+    socket.emit('joinRoom', { roomCode, name }, (response) => {
         console.log("Join room response:", response);
         joinRoomBtn.disabled = false;
         if (response.success) {
@@ -341,7 +353,9 @@ function updateWaitingRoomUI(players, hostId) {
         playerEl.innerHTML = `
             <div class="flex items-center">
                 <span class="player-color-dot" style="background-color: ${player.color}"></span>
-                <span class="font-medium truncate" style="max-width: 200px;">${player.id} ${isMe ? '(You)' : ''} ${player.socketId === hostId ? '👑' : ''}</span>
+                <span class="font-medium truncate" style="max-width: 200px;">
+  ${player.name || player.id} ${isMe ? '(You)' : ''} ${player.socketId === hostId ? '👑' : ''}
+</span>
             </div>
             <span class="font-bold text-green-400">${player.socketId === hostId ? 'Host' : 'Ready'}</span>
         `;
@@ -362,7 +376,6 @@ function drawGame() {
     if (!localGameState) return;
     
     const { players, food, gridSize } = localGameState;
-    // CRITICAL: Now read the size from the game state object!
     const GRID_SIZE = gridSize; 
     const tileSize = canvas.width / GRID_SIZE; 
     
@@ -381,27 +394,48 @@ function drawGame() {
     
     // Draw snakes
     Object.values(players).forEach(p => {
+        // Set transparency if player is dead
         if (!p.isAlive) {
-            ctx.globalAlpha = 0.3; // Make crashed snakes translucent
+            ctx.globalAlpha = 0.3;
         } else {
             ctx.globalAlpha = 1.0;
         }
         
         ctx.fillStyle = p.color;
+
+        // Draw each segment
         p.snake.forEach((segment, index) => {
-            // Draw the square for the segment
             ctx.fillRect(segment.x * tileSize, segment.y * tileSize, tileSize, tileSize);
             
-            // Draw outline for head (first segment)
+            // Draw head outline
             if (index === 0) {
                 ctx.strokeStyle = 'white';
                 ctx.lineWidth = 2;
                 ctx.strokeRect(segment.x * tileSize, segment.y * tileSize, tileSize, tileSize);
             }
         });
+
+        // --- ⭐ Draw Player Name Above Head ---
+        const head = p.snake[0];
+        if (head && p.name) {
+            ctx.font = `${Math.max(12, tileSize * 0.6)}px Inter`;
+            ctx.fillStyle = 'white';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+
+            ctx.fillText(
+                p.name,
+                head.x * tileSize + tileSize / 2,   // center horizontally
+                head.y * tileSize - 2               // slightly above the head
+            );
+        }
+
     });
+
+    // Reset global alpha
     ctx.globalAlpha = 1.0;
 }
+
 
 function updateScoreboard(players) {
     scoreBoard.innerHTML = '';
@@ -414,7 +448,7 @@ function updateScoreboard(players) {
         }
         scoreEl.innerHTML = `
             <span class="player-color-dot" style="background-color: ${p.color}"></span>
-            <span>${p.score} ${isMe ? '(You)' : ''}</span>
+    <span>${p.name || p.id} — ${p.score} ${isMe ? '(You)' : ''}</span>
         `;
         scoreBoard.appendChild(scoreEl);
     });
@@ -435,7 +469,7 @@ function updateFinalScores(players) {
         scoreEl.innerHTML = `
             <div class="flex items-center">
                 <span class="player-color-dot" style="background-color: ${p.color}"></span>
-                <span class="font-medium">${p.id}</span>
+                <span class="font-medium">${p.name || p.p.id}</span>
             </div>
             <span class="font-bold text-xl">${p.score} ${emoji}</span>
         `;
@@ -477,6 +511,10 @@ playAgainBtn.addEventListener('click', () => {
         socket.emit('requestReset', currentRoomCode);
     }
 });
+
+    const nameInput = document.getElementById('name-input');
+    let userName = null;
+
 </script>
 </body>
 </html>
