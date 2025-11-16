@@ -1,10 +1,54 @@
-/*
-  Note: server moved to `backend/server.js`.
-  This file is left as a placeholder to avoid accidental usage.
-  Run the app with:
-    npm start
-  which executes `backend/server.js`.
-*/
+const express = require('express');
+const http = require('http');
+const path = require('path');
+const { Server } = require('socket.io');
+
+const app = express();
+// Serve static files from the public folder (frontend build / static assets)
+app.use(express.static(path.join(__dirname, '..', 'public')));
+// IMPORTANT: Adjust port if needed, but 3000 is standard
+const server = http.createServer(app);
+const io = new Server(server);
+
+// Serve the client file (index.html) from the public folder
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+});
+
+// Function to generate a random 4-letter room code
+function generateRoomCode() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    let code = '';
+    for (let i = 0; i < 4; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+}
+
+// Global map to hold game states (RoomCode -> GameState)
+const gameStates = {};
+// Global map to hold game intervals (RoomCode -> IntervalId)
+const gameIntervals = {};
+
+// --- Helper Functions ---
+
+// Function to get a unique color for a new player
+function getAvailableColor(players) {
+    const usedColors = Object.values(players).map(p => p.color);
+    // Use a fixed set of visible, distinct colors
+    const availableColors = ['#059669', '#3b82f6', '#ef4444', '#f59e0b', '#8b5cf6', '#ec4899'].filter(
+        color => !usedColors.includes(color)
+    );
+    return availableColors[0] || '#64748b'; // Default gray if all primary colors are used
+}
+
+// Generate random food position
+function generateFood(gridSize) {
+    return {
+        x: Math.floor(Math.random() * gridSize),
+        y: Math.floor(Math.random() * gridSize),
+    };
+}
 
 // Initialize player state with distinct starting positions based on index
 function initPlayer(socketId, color, gridSize, playerIndex) {

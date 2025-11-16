@@ -2,10 +2,8 @@
 
 body {
     font-family: 'Inter', sans-serif;
-    background-color: #0f172a;
-    /* Slate 900 */
-    color: #f8fafc;
-    /* Slate 50 */
+    background-color: #0f172a; /* Slate 900 */
+    color: #f8fafc; /* Slate 50 */
     display: flex;
     justify-content: center;
     align-items: center;
@@ -17,8 +15,7 @@ body {
 .container {
     max-width: 900px;
     width: 100%;
-    background-color: #1e293b;
-    /* Slate 800 */
+    background-color: #1e293b; /* Slate 800 */
     border-radius: 12px;
     box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
     padding: 20px;
@@ -26,14 +23,12 @@ body {
 
 canvas {
     border-radius: 8px;
-    border: 4px solid #334155;
-    /* Slate 700 */
+    border: 4px solid #334155; /* Slate 700 */
     transition: transform 0.1s ease-out;
 }
 
 .btn-primary {
-    background-color: #3b82f6;
-    /* Blue 500 */
+    background-color: #3b82f6; /* Blue 500 */
     color: white;
     padding: 10px 20px;
     border-radius: 8px;
@@ -42,14 +37,12 @@ canvas {
 }
 
 .btn-primary:hover {
-    background-color: #2563eb;
-    /* Blue 600 */
+    background-color: #2563eb; /* Blue 600 */
     transform: translateY(-1px);
 }
 
 .btn-secondary {
-    background-color: #475569;
-    /* Slate 600 */
+    background-color: #475569; /* Slate 600 */
     color: white;
     padding: 8px 16px;
     border-radius: 8px;
@@ -57,13 +50,11 @@ canvas {
 }
 
 .btn-secondary:hover {
-    background-color: #334155;
-    /* Slate 700 */
+    background-color: #334155; /* Slate 700 */
 }
 
 .input-field {
-    background-color: #334155;
-    /* Slate 700 */
+    background-color: #334155; /* Slate 700 */
     color: white;
     padding: 10px;
     border-radius: 8px;
@@ -86,6 +77,3 @@ canvas {
     right: 20px;
     transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
 }
-
-/* NOTE: This root `styles.css` is superseded by `public/styles.css`.
-   Keep for compatibility if you reference files directly from repo root. */
