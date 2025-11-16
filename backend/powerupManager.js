@@ -5,7 +5,7 @@ const POWERUP_TYPES = {
     INVINCIBLE: {
         id: 'invincible',
         name: 'Invincible',
-        duration: 8000, // 8 seconds
+        duration: 6000, // 6 seconds
         color: '#fbbf24', // amber/gold
         emoji: '⭐',
         spawnWeight: 1 // relative spawn probability
@@ -13,9 +13,25 @@ const POWERUP_TYPES = {
     SPEED_BOOST: {
         id: 'speed_boost',
         name: 'Speed Boost',
-        duration: 6000, // 6 seconds
+        duration: 6000, 
         color: '#3b82f6', // blue
         emoji: '⚡',
+        spawnWeight: 1
+    },
+    MULTIPLIER: {
+        id: 'multiplier',
+        name: '2x Points',
+        duration: 6000, 
+        color: '#10b981', // emerald green
+        emoji: '💎',
+        spawnWeight: 1
+    },
+    FREEZE: {
+        id: 'freeze',
+        name: 'Freeze Others',
+        duration: 4000, 
+        color: '#0ea5e9', // sky blue
+        emoji: '❄️',
         spawnWeight: 1
     }
 };
@@ -24,7 +40,7 @@ const POWERUP_TYPES = {
 const POWERUP_CONFIG = {
     spawnChance: 0.90, // 15% chance per food eaten
     maxActivePowerups: 2, // max powerups on map at once
-    minSpawnInterval: 10000, // minimum 10 seconds between spawns
+    minSpawnInterval: 5000, // minimum 1 second between spawns
 };
 
 // Active powerups in each game room
@@ -63,11 +79,19 @@ function generatePowerupPosition(gridSize, players, food, existingPowerups) {
             y: Math.floor(Math.random() * gridSize)
         };
 
-        // Check food overlap
-        if (position.x === food.x && position.y === food.y) {
+        // Check food overlap (food is now an array)
+        if (Array.isArray(food)) {
+            for (const foodItem of food) {
+                if (position.x === foodItem.x && position.y === foodItem.y) {
+                    overlap = true;
+                    break;
+                }
+            }
+        } else if (food && position.x === food.x && position.y === food.y) {
+            // Backward compatibility for single food object
             overlap = true;
-            continue;
         }
+        if (overlap) continue;
 
         // Check existing powerups overlap
         for (const powerup of existingPowerups) {
@@ -192,18 +216,20 @@ function applyPowerupToPlayer(player, powerupType) {
 /**
  * Update and remove expired powerup effects from players
  */
-function updatePlayerPowerups(players) {
+function cleanupPlayerEffects(players) {
     const now = Date.now();
 
     for (const player of Object.values(players)) {
-        if (!player.activePowerups || player.activePowerups.length === 0) continue;
-
-        // Remove expired powerups
-        const beforeCount = player.activePowerups.length;
-        player.activePowerups = player.activePowerups.filter(effect => effect.endTime > now);
-        
-        if (player.activePowerups.length < beforeCount) {
-            console.log(`[POWERUP] Removed expired powerup(s) from player ${player.socketId}`);
+        if (player.activePowerups) {
+            const before = player.activePowerups.length;
+            player.activePowerups = player.activePowerups.filter(effect => effect.endTime > now);
+            if (player.activePowerups.length < before) {
+                console.log(`[POWERUP] Expired effects removed from ${player.socketId.substring(0,5)}`);
+            }
+        }
+        if (player.frozenUntil && player.frozenUntil <= now) {
+            delete player.frozenUntil;
+            console.log(`[FREEZE] ${player.socketId.substring(0,5)} thawed`);
         }
     }
 }
@@ -231,7 +257,7 @@ module.exports = {
     trySpawnPowerup,
     checkPowerupCollection,
     applyPowerupToPlayer,
-    updatePlayerPowerups,
+    cleanupPlayerEffects,
     hasActivePowerup,
     getActivePowerups
 };

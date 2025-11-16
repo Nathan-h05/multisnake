@@ -3,7 +3,7 @@ const {
     trySpawnPowerup,
     checkPowerupCollection,
     applyPowerupToPlayer,
-    updatePlayerPowerups,
+    cleanupPlayerEffects,
     hasActivePowerup,
     initPowerupsForRoom,
     cleanupPowerupsForRoom,
@@ -12,6 +12,20 @@ const {
 const DEFAULT_GRID_SIZE = 20;
 
 const gameStates = {};
+
+function applyFreezeToOthers(roomCode, immunePlayerId) {
+    const state = gameStates[roomCode];
+    if (!state) return;
+    const now = Date.now();
+    const duration = 5000; // From POWERUP_TYPES.FREEZE.duration
+    Object.keys(state.players).forEach(playerId => {
+        const player = state.players[playerId];
+        if (playerId !== immunePlayerId && player.isAlive) {
+            player.frozenUntil = now + duration;
+        }
+    });
+    console.log(`[FREEZE] ${immunePlayerId.substring(0,5)} froze others in ${roomCode}`);
+}
 
 // Helper utilities
 function generateRoomCode() {
@@ -39,17 +53,68 @@ function generateFood(gridSize) {
     let grow = true;      // whether eating this increases snake length
     let score = 1;        // how many points
 
-    if (r > 0.8 && r <= 0.9) {
-        type = 'doubleScore';
-        score = 2;
-        grow = true;      // still grows
-    } else if (r > 0.9) {
-        type = 'speedBoost';
-        score = 1;
-        grow = false;     // no extra length, just buff
-    }
+    // if (r > 0.8 && r <= 0.9) {
+    //     type = 'doubleScore';
+    //     score = 2;
+    //     grow = true;      // still grows
+    // } else if (r > 0.9) {
+    //     type = 'speedBoost';
+    //     score = 1;
+    //     grow = false;     // no extra length, just buff
+    // }
 
     return { x, y, type, grow, score };
+}
+
+function calculateAppleCount(setting, playerCount) {
+    switch (setting) {
+        case 'EQUAL':
+            return playerCount;
+        case 'HALF':
+            return Math.max(1, Math.floor(playerCount / 2));
+        default:
+            // Fixed number (1, 2, 3, or 4)
+            return parseInt(setting) || 1;
+    }
+}
+
+function generateMultipleFood(gridSize, count, players, existingFood = []) {
+    const foodArray = [...existingFood];
+    let attempts = 0;
+    const maxAttempts = 100;
+
+    while (foodArray.length < count && attempts < maxAttempts) {
+        const newFood = generateFood(gridSize);
+        let overlap = false;
+
+        // Check overlap with existing food
+        for (const food of foodArray) {
+            if (food.x === newFood.x && food.y === newFood.y) {
+                overlap = true;
+                break;
+            }
+        }
+
+        // Check overlap with snake segments
+        if (!overlap) {
+            for (const player of Object.values(players)) {
+                for (const segment of player.snake) {
+                    if (segment.x === newFood.x && segment.y === newFood.y) {
+                        overlap = true;
+                        break;
+                    }
+                }
+                if (overlap) break;
+            }
+        }
+
+        if (!overlap) {
+            foodArray.push(newFood);
+        }
+        attempts++;
+    }
+
+    return foodArray;
 }
 
 function initPlayer(socketId, color, gridSize, playerIndex, name) {
@@ -80,7 +145,7 @@ function initPlayer(socketId, color, gridSize, playerIndex, name) {
     };
 }
 
-function createGameState(roomCode, hostId, gridSize, hostName) {
+function createGameState(roomCode, hostId, gridSize, hostName, appleCountSetting = 'EQUAL') {
     const playerColor = getAvailableColor({});
     const initialState = {
         roomCode,
@@ -88,7 +153,8 @@ function createGameState(roomCode, hostId, gridSize, hostName) {
         gameState: 'waiting',
         gridSize: gridSize || DEFAULT_GRID_SIZE,
         players: {},
-        food: generateFood(gridSize || DEFAULT_GRID_SIZE),
+        food: [], // Will be populated after players join
+        appleCountSetting: appleCountSetting,
     };
     initialState.players[hostId] = initPlayer(hostId, playerColor, initialState.gridSize, 0, hostName);
     
@@ -202,7 +268,13 @@ function detectFatalCollisions(state) {
 }
 
 function checkFood(head, state) {
-    return head.x === state.food.x && head.y === state.food.y;
+    // Check if head collides with any food in the array
+    for (let i = 0; i < state.food.length; i++) {
+        if (head.x === state.food[i].x && head.y === state.food[i].y) {
+            return i; // Return the index of the collected food
+        }
+    }
+    return -1; // No food collected
 }
 
 // updateGameState is pure-ish: modifies state but does not emit sockets or manage intervals
@@ -230,37 +302,35 @@ function updateGameState(roomCode) {
 
 // Process a single game tick (all players or subset)
 function processSingleTick(roomCode, state, onlyPlayerIds = null) {
-    // A Set to track players that died this tick
     const diedThisTick = new Set();
     let isGameOver = false;
+    const now = Date.now();
 
-    // 1. Pass 1: Compute next heads
+    // 1. Pass 1: Compute next heads for NON-FROZEN alive players only
     Object.keys(state.players).forEach(playerId => {
         const player = state.players[playerId];
         if (!player.isAlive) return;
         if (onlyPlayerIds && !onlyPlayerIds.includes(playerId)) return;
-        
+        if (player.frozenUntil && player.frozenUntil > now) return; // Skip frozen
+
         const nextX = player.snake[0].x + player.direction.x;
         const nextY = player.snake[0].y + player.direction.y;
-        
         let wrappedX = nextX % state.gridSize; if (wrappedX < 0) wrappedX += state.gridSize;
         let wrappedY = nextY % state.gridSize; if (wrappedY < 0) wrappedY += state.gridSize;
-        
-        player.nextHead = { x: wrappedX, y: wrappedY, socketId: player.socketId };
+        player.nextHead = { x: wrappedX, y: wrappedY, socketId: playerId };
     });
 
-    // 2. Pass 2: Detect ALL Fatal Collisions simultaneously
+    // 2. Pass 2: Detect fatal collisions (only moving heads)
     const fatalities = detectFatalCollisions(state);
-    
-    // 3. Pass 3: Apply movement, food, powerups, and deaths
+
+    // 3. Pass 3: Apply movement/food/powerups/deaths
     let foodWasEaten = false;
-    
     Object.keys(state.players).forEach(playerId => {
         const player = state.players[playerId];
         if (!player.isAlive) return;
         if (onlyPlayerIds && !onlyPlayerIds.includes(playerId)) return;
-        
-        // Check if player died in the collision detection phase
+        if (player.frozenUntil && player.frozenUntil > now) return; // Already skipped
+
         if (fatalities.has(playerId)) {
             player.isAlive = false;
             diedThisTick.add(playerId);
@@ -268,57 +338,57 @@ function processSingleTick(roomCode, state, onlyPlayerIds = null) {
             return;
         }
 
-        // Apply movement
+        // Move: grow temporarily
         const newHead = player.nextHead;
         player.snake.unshift(newHead);
 
-        // Check for food
-        if (checkFood(newHead, state)) {
-            player.score += 1;
+        const foodIndex = checkFood(newHead, state);
+        if (foodIndex !== -1) {
+            let points = state.food.score || 1;
+            if (hasActivePowerup(player, 'multiplier')) points *= 2;
+            player.score += points;
             foodWasEaten = true;
+
+            // Remove the eaten food
+            state.food.splice(foodIndex, 1);
             
-            // Generate new food not overlapping any snake
-            let newFood, overlap;
-            do {
-                overlap = false;
-                newFood = generateFood(state.gridSize);
-                Object.values(state.players).forEach(p => p.snake.forEach(seg => { if (seg.x === newFood.x && seg.y === newFood.y) overlap = true; }));
-            } while (overlap);
-            state.food = newFood;
+            // Generate new food to maintain apple count
+            const targetAppleCount = calculateAppleCount(state.appleCountSetting, Object.keys(state.players).length);
+            state.food = generateMultipleFood(state.gridSize, targetAppleCount, state.players, state.food);
+
+            // Net growth?
+            const shouldGrow = state.food.grow !== false;
+            if (!shouldGrow) player.snake.pop();
         } else {
-            // Remove tail if no food was eaten
-            player.snake.pop();
+            player.snake.pop(); // Normal move
         }
-        
-        // Check for powerup collection (only on first tick, not speed boost extra tick)
+
+        // Powerup collection (only main tick)
         if (!onlyPlayerIds) {
-            const collectedPowerup = checkPowerupCollection(newHead, roomCode);
-            if (collectedPowerup) {
-                applyPowerupToPlayer(player, collectedPowerup.type);
+            const collected = checkPowerupCollection(newHead, roomCode);
+            if (collected) {
+                if (collected.type === 'freeze') {
+                    applyFreezeToOthers(roomCode, player.socketId);
+                } else {
+                    applyPowerupToPlayer(player, collected.type);
+                }
             }
         }
-        
+
         delete player.nextHead;
     });
-    
-    // Try to spawn powerup if food was eaten (only on first tick)
-    if (!onlyPlayerIds && foodWasEaten) {
-        trySpawnPowerup(roomCode, state.gridSize, state.players, state.food);
-    }
-    
-    // Update all player powerups (remove expired effects) - only on first tick
+
+    // Powerup spawn + cleanup (main tick only)
     if (!onlyPlayerIds) {
-        updatePlayerPowerups(state.players);
+        if (foodWasEaten) trySpawnPowerup(roomCode, state.gridSize, state.players, state.food);
+        cleanupPlayerEffects(state.players);
     }
 
-    const activePlayers = Object.values(state.players).filter(p => p.isAlive).length;
-    if (activePlayers <= 1) {
+    const aliveCount = Object.values(state.players).filter(p => p.isAlive).length;
+    if (aliveCount <= 1) {
         state.gameState = 'gameover';
         isGameOver = true;
-    }
-
-    // time-based check (if endTime present)
-    if (!isGameOver && state.endTime && Date.now() >= state.endTime) {
+    } else if (state.endTime && now >= state.endTime) {
         state.gameState = 'gameover';
         isGameOver = true;
     }
@@ -331,6 +401,8 @@ module.exports = {
     generateRoomCode,
     getAvailableColor,
     generateFood,
+    generateMultipleFood,
+    calculateAppleCount,
     initPlayer,
     createGameState,
     updateGameState,

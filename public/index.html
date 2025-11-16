@@ -59,6 +59,20 @@
             <p class="text-xs text-slate-400">Determines the snake movement interval (ms between ticks).</p>
         </div>
 
+        <!-- Apple Count Selector -->
+        <div class="space-y-2 p-4 bg-slate-700 rounded-lg">
+            <label for="apple-count-selector" class="block font-semibold">Number of Apples</label>
+            <select id="apple-count-selector" class="input-field appearance-none">
+                <option value="EQUAL" selected>Equal to Players</option>
+                <option value="HALF">Half of Players</option>
+                <option value="1">Fixed: 1 Apple</option>
+                <option value="2">Fixed: 2 Apples</option>
+                <option value="3">Fixed: 3 Apples</option>
+                <option value="4">Fixed: 4 Apples</option>
+            </select>
+            <p class="text-xs text-slate-400">More apples = less competition for food.</p>
+        </div>
+
         <button id="create-room-btn" class="btn-primary w-full shadow-lg shadow-blue-500/50">
             Create New Room
         </button>

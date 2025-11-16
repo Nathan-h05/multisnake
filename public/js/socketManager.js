@@ -94,8 +94,10 @@ export function handleCreateRoom() {
     const durationMinutes = parseFloat(durationInput.value);
     const durationSeconds = Math.max(10, Math.min(3600, Math.floor((isNaN(durationMinutes) ? 2 : durationMinutes) * 60)));
 
+    const appleCount = document.getElementById('apple-count-selector').value;
+
     const socket = getSocket();
-    socket.emit('createRoom', { gridSize: gridSize, durationSeconds: durationSeconds, speed: gameSpeed, name}, (response) => {
+    socket.emit('createRoom', { gridSize: gridSize, durationSeconds: durationSeconds, speed: gameSpeed, appleCount: appleCount, name}, (response) => {
         createRoomBtn.disabled = false;
         if (response.success) {
             setRoomCode(response.roomCode);
