@@ -1,0 +1,18 @@
+{
+  "name": "multisnake",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm --prefix frontend run dev\" \"npm --prefix backend run dev\"",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:backend": "npm --prefix backend run dev",
+    "install:all": "npm install && npm --prefix frontend install && npm --prefix backend install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
