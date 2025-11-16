@@ -39,7 +39,6 @@ const errorMessage = document.getElementById('error-message');
 const startGameBtn = document.getElementById('start-game-btn');
 const playAgainBtn = document.getElementById('play-again-btn');
 const timerDisplay = document.getElementById('timer-display');
-const leaderboardBody = document.getElementById('leaderboard-body'); // <-- NEW
 
 export function showScreen(screenId) {
     Object.values(screens).forEach(screen => screen.classList.add('hidden'));
@@ -203,60 +202,8 @@ export function updateFinalScores(players) {
         playAgainBtn.classList.add('hidden');
     }
 
-    loadLeaderboard();
 }
 
-export async function loadLeaderboard() {
-    if (!leaderboardBody) return;
-
-    leaderboardBody.innerHTML = `
-        <tr>
-            <td class="py-2 text-slate-400" colspan="5">Loading leaderboard...</td>
-        </tr>
-    `;
-
-    try {
-        const res = await fetch('/api/leaderboard');
-        const data = await res.json();
-
-        leaderboardBody.innerHTML = '';
-
-        if (!Array.isArray(data) || data.length === 0) {
-            leaderboardBody.innerHTML = `
-                <tr>
-                    <td class="py-2 text-slate-400" colspan="5">No games recorded yet.</td>
-                </tr>
-            `;
-            return;
-        }
-
-        data.forEach((row, index) => {
-            const tr = document.createElement('tr');
-            tr.className = 'border-b border-slate-800';
-
-            const totalSec = row.durationSeconds || 0;
-            const mins = Math.floor(totalSec / 60);
-            const secs = totalSec % 60;
-            const timeStr = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-
-            tr.innerHTML = `
-                <td class="py-2 pr-4">${index + 1}</td>
-                <td class="py-2 pr-4">${row.winnerName}</td>
-                <td class="py-2 pr-4">${row.score}</td>
-                <td class="py-2 pr-4">${timeStr}</td>
-                <td class="py-2 pr-4">${row.playersCount}</td>
-            `;
-            leaderboardBody.appendChild(tr);
-        });
-    } catch (err) {
-        console.error('Failed to load leaderboard:', err);
-        leaderboardBody.innerHTML = `
-            <tr>
-                <td class="py-2 text-red-400" colspan="5">Failed to load leaderboard.</td>
-            </tr>
-        `;
-    }
-}
 
 
 // Timer helpers

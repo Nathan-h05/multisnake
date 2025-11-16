@@ -63,7 +63,12 @@ export function connectToServer() {
                 showScreen('gameover');
                 updateFinalScores(state.players);
                 clearClientTimer();
+
+                // 👇 tell main.js that a game has finished
+                window.dispatchEvent(new Event('game-finished'));
                 break;
+
+
         }
     });
 }
