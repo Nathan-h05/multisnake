@@ -3,6 +3,8 @@ const http = require('http');
 const { Server } = require('socket.io');
 
 const app = express();
+// Serve static files (CSS, JS, images) from project root
+app.use(express.static(__dirname));
 // IMPORTANT: Adjust port if needed, but 3000 is standard
 const server = http.createServer(app);
 const io = new Server(server);
