@@ -132,12 +132,13 @@ function checkCollision(head, state) {
     // 2. Other Snake Collision (checks active and stationary bodies)
     for (const playerId of playerKeys) {
         const otherSnake = players[playerId].snake;
+        if (!players[playerId].isAlive) continue; // Skip dead snakes
         // Check collision against the whole body of every other snake
         for (let i = 0; i < otherSnake.length; i++) {
             // Skip checking our own head against itself
             if (playerId === head.socketId && i === 0) continue; 
             
-            if (otherSnake.isAlive && head.x === otherSnake[i].x && head.y === otherSnake[i].y) {
+            if (head.x === otherSnake[i].x && head.y === otherSnake[i].y) {
                 return true;
             }
         }
