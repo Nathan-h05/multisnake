@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import socket from "./socket";
 
 const CELL_SIZE = 20;
 const BOARD_WIDTH = 30;
@@ -15,6 +16,10 @@ export default function Game() {
   ]);
   const [direction, setDirection] = useState<Position>({ x: 1, y: 0 });
   const [apple, setApple] = useState<Position>({ x: 10, y: 10 });
+  const [otherPlayers, setOtherPlayers] = useState<Record<string, { segments: Position[] }>>({});
+
+  // keep a ref of the latest snake so we can emit reliably from the interval
+  const snakeRef = useRef<Position[]>(snake);
 
   // Spawn a new apple somewhere random
   const spawnApple = () => {
@@ -44,6 +49,9 @@ export default function Game() {
         newSnake.pop(); // move without growing
       }
 
+      // sync ref
+      snakeRef.current = newSnake;
+
       return newSnake;
     });
   };
@@ -65,6 +73,14 @@ export default function Game() {
       ctx.fillRect(p.x * CELL_SIZE, p.y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
     });
 
+    // Draw other players in blue
+    ctx.fillStyle = "deepskyblue";
+    Object.values(otherPlayers).forEach((player) => {
+      player.segments.forEach((p) => {
+        ctx.fillRect(p.x * CELL_SIZE, p.y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+      });
+    });
+
     // Draw apple
     ctx.fillStyle = "red";
     ctx.fillRect(apple.x * CELL_SIZE, apple.y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
@@ -82,14 +98,49 @@ export default function Game() {
     return () => window.removeEventListener("keydown", handleKey);
   }, [direction]);
 
+  // keep ref synced if snake changed elsewhere
+  useEffect(() => {
+    snakeRef.current = snake;
+  }, [snake]);
+
   // Game loop (8 FPS = classic snake)
   useEffect(() => {
     const interval = setInterval(() => {
       gameTick();
       draw();
+
+      // emit our current snake to the server so others can see us
+      try {
+        if ((socket as any) && (socket as any).connected) {
+          socket.emit("state", { segments: snakeRef.current });
+        }
+      } catch (e) {
+        // ignore for now
+      }
     }, 125);
     return () => clearInterval(interval);
   });
+
+  // Listen for players updates from server
+  useEffect(() => {
+    const handler = (players: Record<string, any>) => {
+      // remove our own id from the otherPlayers list
+      const copy: Record<string, { segments: Position[] }> = {};
+      Object.keys(players || {}).forEach((id) => {
+        if (id === (socket as any).id) return;
+        copy[id] = { segments: players[id].segments || [] };
+      });
+      setOtherPlayers(copy);
+    };
+
+    socket.on("players", handler);
+    // request an initial players list (server will broadcast updates when states arrive)
+    try { socket.emit("state", { segments: snakeRef.current }); } catch {}
+
+    return () => {
+      try { socket.off("players", handler); } catch {}
+    };
+  }, []);
 
   return (
     <div className="flex justify-center items-center h-screen">
