@@ -172,8 +172,15 @@ export function drawGame() {
         ctx.stroke();
     }
 
-    // Draw apple (fancy)
-    drawApple(ctx, food.x, food.y, tileSize);
+    // Draw apples (support multiple apples)
+    if (Array.isArray(food)) {
+        food.forEach(apple => {
+            drawApple(ctx, apple.x, apple.y, tileSize);
+        });
+    } else if (food) {
+        // Backward compatibility for single food object
+        drawApple(ctx, food.x, food.y, tileSize);
+    }
 
     // Draw powerups
     if (localGameState.powerups && Array.isArray(localGameState.powerups)) {

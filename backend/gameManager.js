@@ -52,6 +52,57 @@ function generateFood(gridSize) {
     return { x, y, type, grow, score };
 }
 
+function calculateAppleCount(setting, playerCount) {
+    switch (setting) {
+        case 'EQUAL':
+            return playerCount;
+        case 'HALF':
+            return Math.max(1, Math.floor(playerCount / 2));
+        default:
+            // Fixed number (1, 2, 3, or 4)
+            return parseInt(setting) || 1;
+    }
+}
+
+function generateMultipleFood(gridSize, count, players, existingFood = []) {
+    const foodArray = [...existingFood];
+    let attempts = 0;
+    const maxAttempts = 100;
+
+    while (foodArray.length < count && attempts < maxAttempts) {
+        const newFood = generateFood(gridSize);
+        let overlap = false;
+
+        // Check overlap with existing food
+        for (const food of foodArray) {
+            if (food.x === newFood.x && food.y === newFood.y) {
+                overlap = true;
+                break;
+            }
+        }
+
+        // Check overlap with snake segments
+        if (!overlap) {
+            for (const player of Object.values(players)) {
+                for (const segment of player.snake) {
+                    if (segment.x === newFood.x && segment.y === newFood.y) {
+                        overlap = true;
+                        break;
+                    }
+                }
+                if (overlap) break;
+            }
+        }
+
+        if (!overlap) {
+            foodArray.push(newFood);
+        }
+        attempts++;
+    }
+
+    return foodArray;
+}
+
 function initPlayer(socketId, color, gridSize, playerIndex, name) {
     const q = Math.floor(gridSize / 4);
     const tq = Math.floor(gridSize * 3 / 4);
@@ -80,7 +131,7 @@ function initPlayer(socketId, color, gridSize, playerIndex, name) {
     };
 }
 
-function createGameState(roomCode, hostId, gridSize, hostName) {
+function createGameState(roomCode, hostId, gridSize, hostName, appleCountSetting = 'EQUAL') {
     const playerColor = getAvailableColor({});
     const initialState = {
         roomCode,
@@ -88,7 +139,8 @@ function createGameState(roomCode, hostId, gridSize, hostName) {
         gameState: 'waiting',
         gridSize: gridSize || DEFAULT_GRID_SIZE,
         players: {},
-        food: generateFood(gridSize || DEFAULT_GRID_SIZE),
+        food: [], // Will be populated after players join
+        appleCountSetting: appleCountSetting,
     };
     initialState.players[hostId] = initPlayer(hostId, playerColor, initialState.gridSize, 0, hostName);
     
@@ -202,7 +254,13 @@ function detectFatalCollisions(state) {
 }
 
 function checkFood(head, state) {
-    return head.x === state.food.x && head.y === state.food.y;
+    // Check if head collides with any food in the array
+    for (let i = 0; i < state.food.length; i++) {
+        if (head.x === state.food[i].x && head.y === state.food[i].y) {
+            return i; // Return the index of the collected food
+        }
+    }
+    return -1; // No food collected
 }
 
 // updateGameState is pure-ish: modifies state but does not emit sockets or manage intervals
@@ -273,18 +331,17 @@ function processSingleTick(roomCode, state, onlyPlayerIds = null) {
         player.snake.unshift(newHead);
 
         // Check for food
-        if (checkFood(newHead, state)) {
+        const foodIndex = checkFood(newHead, state);
+        if (foodIndex !== -1) {
             player.score += 1;
             foodWasEaten = true;
             
-            // Generate new food not overlapping any snake
-            let newFood, overlap;
-            do {
-                overlap = false;
-                newFood = generateFood(state.gridSize);
-                Object.values(state.players).forEach(p => p.snake.forEach(seg => { if (seg.x === newFood.x && seg.y === newFood.y) overlap = true; }));
-            } while (overlap);
-            state.food = newFood;
+            // Remove the eaten food
+            state.food.splice(foodIndex, 1);
+            
+            // Generate new food to maintain apple count
+            const targetAppleCount = calculateAppleCount(state.appleCountSetting, Object.keys(state.players).length);
+            state.food = generateMultipleFood(state.gridSize, targetAppleCount, state.players, state.food);
         } else {
             // Remove tail if no food was eaten
             player.snake.pop();
@@ -331,6 +388,8 @@ module.exports = {
     generateRoomCode,
     getAvailableColor,
     generateFood,
+    generateMultipleFood,
+    calculateAppleCount,
     initPlayer,
     createGameState,
     updateGameState,
