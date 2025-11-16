@@ -1,4 +1,5 @@
 const { gameStates, generateRoomCode, getAvailableColor, createGameState, initPlayer, updateGameState } = require('./gameManager');
+const GameResult = require('./models/GameResult');
 
 // Map roomCode -> intervalId for game loops
 const gameIntervals = {};
@@ -17,6 +18,41 @@ function getIntervalDelay(speedKey) {
     return 1000 / setting.ticksPerSecond;
 }
 
+function saveGameResult(state) {
+    try {
+        const players = Object.values(state.players);
+        if (players.length === 0) return;
+
+        // Winner = alive with highest score, otherwise highest score overall
+        const alive = players.filter(p => p.isAlive);
+        let winnerList = alive.length > 0 ? alive : players;
+        winnerList.sort((a, b) => b.score - a.score);
+
+        const winner = winnerList[0];
+
+        // Actual duration in seconds (fallback = configured duration)
+        let durationSeconds = state.gameDurationSeconds || 0;
+        if (state.startTime) {
+            durationSeconds = Math.round((Date.now() - state.startTime) / 1000);
+        }
+
+        const doc = new GameResult({
+            winnerName: winner.name || winner.id,
+            score: winner.score || 0,
+            durationSeconds,
+            playersCount: players.length,
+        });
+
+        doc.save()
+            .then(() => console.log(`💾 Saved game result for winner ${winner.name}`))
+            .catch(err => console.error('Error saving game result:', err));
+
+    } catch (err) {
+        console.error('Unexpected error in saveGameResult:', err);
+    }
+}
+
+
 function startGameLoop(io, roomCode) {
     const state = gameStates[roomCode];
     if (!state || gameIntervals[roomCode]) return;
@@ -27,14 +63,19 @@ function startGameLoop(io, roomCode) {
     gameIntervals[roomCode] = setInterval(() => {
         const isGameOver = updateGameState(roomCode);
         const currentState = gameStates[roomCode];
-        // emit to room
         io.to(roomCode).emit('gameState', currentState);
+
         if (isGameOver) {
             clearInterval(gameIntervals[roomCode]);
             delete gameIntervals[roomCode];
+
+            // 🔥 Save result to MongoDB
+            saveGameResult(currentState);
+
             console.log(`Game loop stopped for room ${roomCode}`);
         }
-    }, delay); // Use the custom delay
+    }, delay);
+
 }
 
 function stopGameLoop(roomCode) {
@@ -101,6 +142,7 @@ function initSocket(io) {
             if (!state || state.hostId !== socket.id || state.gameState !== 'waiting') return;
             if (Object.keys(state.players).length < 1) { console.log(`Cannot start room ${roomCode}: not enough players.`); return; }
             state.gameState = 'playing';
+            state.startTime = Date.now(); // track when this game started
             if (state.gameDurationSeconds && Number.isFinite(state.gameDurationSeconds)) state.endTime = Date.now() + state.gameDurationSeconds * 1000;
             console.log(`Game started in room ${roomCode}`);
             // start loop
