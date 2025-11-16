@@ -546,11 +546,17 @@ function updateFinalScores(players) {
         }
         
         if (isWinner) {
+            if (isMe) {
+                statusText = '(Winner - You!)';
+            } else {
+                statusText = '(Winner)';
+            }
             colorClass = 'text-yellow-400';
         } else if (!p.isAlive) {
-            statusText = '(Eliminated)';
+            statusText = `(Eliminated)${isMe ? ' (You)' : ''}`;
             colorClass = 'text-gray-500'; // Darker gray for dead players
         } else if (isMe) {
+            statusText = '(You)';
             colorClass = 'text-blue-400';
         }
         
