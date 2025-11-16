@@ -75,6 +75,12 @@ function drawPowerup(ctx, powerup, tileSize) {
     const cy = powerup.y * tileSize + tileSize / 2;
     const radius = tileSize * 0.4;
 
+    // Common: Pulsing glow + scale
+    const pulse = 1 + 0.15 * Math.sin(Date.now() / 400);
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(pulse, pulse);
+
     if (powerup.type === 'invincible') {
         // Gold glowing circle
         const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius * 1.5);
@@ -104,7 +110,6 @@ function drawPowerup(ctx, powerup, tileSize) {
         ctx.beginPath();
         ctx.arc(cx - radius * 0.2, cy - radius * 0.2, radius * 0.3, 0, Math.PI * 2);
         ctx.fill();
-
     } else if (powerup.type === 'speed_boost') {
         // Blue glowing circle
         const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius * 1.5);
@@ -135,7 +140,65 @@ function drawPowerup(ctx, powerup, tileSize) {
         ctx.beginPath();
         ctx.arc(cx - radius * 0.2, cy - radius * 0.3, radius * 0.25, 0, Math.PI * 2);
         ctx.fill();
+    } else if (powerup.type === 'multiplier') {
+        // Green GEM (diamond + shine)
+        ctx.fillStyle = powerup.color;
+        ctx.strokeStyle = '#059669';
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(0, -radius * 0.9);
+        ctx.lineTo(radius * 0.7, 0);
+        ctx.lineTo(0, radius * 0.9);
+        ctx.lineTo(-radius * 0.7, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        // Shine
+        const grad = ctx.createRadialGradient(-radius * 0.25, -radius * 0.35, 0, -radius * 0.15, -radius * 0.2, radius * 0.4);
+        grad.addColorStop(0, 'rgba(255,255,255,0.8)');
+        grad.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(-radius * 0.25, -radius * 0.35, radius * 0.25, 0, Math.PI * 2);
+        ctx.fill();
+    } else if (powerup.type === 'freeze') {
+        // Snowflake (6 arms + branches)
+        ctx.strokeStyle = powerup.color;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        const arms = 6, armLen = radius * 0.85;
+        for (let i = 0; i < arms; i++) {
+            ctx.save();
+            ctx.rotate(i * Math.PI / 3);
+            // Main arm
+            ctx.lineWidth = 3.5;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(0, armLen);
+            ctx.stroke();
+            // Branches
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            ctx.moveTo(0, armLen * 0.3);
+            ctx.lineTo(-armLen * 0.18, armLen * 0.15);
+            ctx.moveTo(0, armLen * 0.3);
+            ctx.lineTo(armLen * 0.18, armLen * 0.15);
+            ctx.moveTo(0, armLen * 0.7);
+            ctx.lineTo(-armLen * 0.12, armLen * 0.85);
+            ctx.moveTo(0, armLen * 0.7);
+            ctx.lineTo(armLen * 0.12, armLen * 0.85);
+            ctx.stroke();
+            ctx.restore();
+        }
+        // Center
+        ctx.fillStyle = powerup.color;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * 0.22, 0, Math.PI * 2);
+        ctx.fill();
     }
+
+    ctx.restore();
 }
 
 export function drawGame() {
@@ -190,43 +253,46 @@ export function drawGame() {
         const now = Date.now();
         const hasInvincible = p.activePowerups?.some(effect => effect.type === 'invincible' && effect.endTime > now) || false;
         const hasSpeedBoost = p.activePowerups?.some(effect => effect.type === 'speed_boost' && effect.endTime > now) || false;
+        const isFrozen = p.frozenUntil && p.frozenUntil > now;
+        let glowRgb = null;
+        const glowTypes = {
+            invincible: [251, 191, 36],
+            speed_boost: [59, 130, 246],
+            multiplier: [16, 185, 129],
+            freeze: [14, 165, 233]
+        };
+        for (const effect of (p.activePowerups || [])) {
+            if (effect.endTime > now && glowTypes[effect.type]) {
+                glowRgb = glowTypes[effect.type];
+                break;
+            }
+        }
 
-        // Make dead snakes more transparent
-        ctx.globalAlpha = isDead ? 0.35 : 1.0;
-
-        // Draw powerup glow around entire snake if active
-        if (!isDead && (hasInvincible || hasSpeedBoost)) {
+        // Enhanced glow (if any active)
+        if (!isDead && glowRgb) {
             const head = p.snake[0];
-            const headCenterX = head.x * tileSize + tileSize / 2;
-            const headCenterY = head.y * tileSize + tileSize / 2;
-            
-            const isInvincibleGlow = hasInvincible;
-            const glowRgb = isInvincibleGlow ? [251, 191, 36] : [59, 130, 246];
-            
-            // Pulsing alpha for outer glow (0.3 to 0.7, cycles every ~500ms)
-            const pulse = 0.3 + 0.4 * (Math.sin(Date.now() / 250) * 0.5 + 0.5);
-            const outerGlowColor = `rgba(${glowRgb[0]}, ${glowRgb[1]}, ${glowRgb[2]}, ${pulse})`;
-            
-            // LAYER 1: Bright inner core (fixed high alpha)
-            ctx.fillStyle = `rgba(${glowRgb[0]}, ${glowRgb[1]}, ${glowRgb[2]}, 0.9)`;
+            const hcx = head.x * tileSize + tileSize / 2;
+            const hcy = head.y * tileSize + tileSize / 2;
+            const pulseAlpha = 0.3 + 0.4 * (Math.sin(now / 250) * 0.5 + 0.5);
+
+            // Inner core
+            ctx.fillStyle = `rgba(${glowRgb[0]},${glowRgb[1]},${glowRgb[2]},0.85)`;
             ctx.beginPath();
-            ctx.arc(headCenterX, headCenterY, tileSize * 0.5, 0, Math.PI * 2);
+            ctx.arc(hcx, hcy, tileSize * 0.55, 0, Math.PI * 2);
             ctx.fill();
-            
-            // LAYER 2: Large fading outer glow (pulsing)
-            const gradient = ctx.createRadialGradient(
-                headCenterX, headCenterY, 0,
-                headCenterX, headCenterY, tileSize * 1.8
-            );
-            gradient.addColorStop(0, outerGlowColor);
-            gradient.addColorStop(0.6, `rgba(${glowRgb[0]}, ${glowRgb[1]}, ${glowRgb[2]}, ${pulse * 0.4})`);
-            gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
-            
-            ctx.fillStyle = gradient;
+
+            // Pulsing outer
+            const grad = ctx.createRadialGradient(hcx, hcy, 0, hcx, hcy, tileSize * 1.9);
+            grad.addColorStop(0, `rgba(${glowRgb[0]},${glowRgb[1]},${glowRgb[2]},${pulseAlpha})`);
+            grad.addColorStop(0.5, `rgba(${glowRgb[0]},${glowRgb[1]},${glowRgb[2]},${pulseAlpha * 0.5})`);
+            grad.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = grad;
             ctx.beginPath();
-            ctx.arc(headCenterX, headCenterY, tileSize * 1.8, 0, Math.PI * 2);
+            ctx.arc(hcx, hcy, tileSize * 1.9, 0, Math.PI * 2);
             ctx.fill();
         }
+
+        // Snake segments + frozen effects
 
         // Slight padding to make segments rounded & separated
         const segPadding = tileSize * 0.15;
@@ -234,17 +300,32 @@ export function drawGame() {
         const radius = segSize * 0.4;
 
         p.snake.forEach((segment, index) => {
-            const x = segment.x * tileSize + segPadding;
-            const y = segment.y * tileSize + segPadding;
+            let x = segment.x * tileSize + segPadding;
+            let y = segment.y * tileSize + segPadding;
 
-            // Body color
+            // FROZEN HEAD JITTER (visual only)
+            if (isFrozen && index === 0) {
+                const jitterSeed = parseInt(p.id, 36) || 0;
+                const time = now / 120;
+                x += Math.sin(time * 4.7 + jitterSeed) * 1.8;
+                y += Math.cos(time * 5.3 + jitterSeed) * 1.8;
+            }
+
             ctx.fillStyle = p.color;
-
-            // Draw rounded segment
             drawRoundedRect(ctx, x, y, segSize, segSize, radius);
             ctx.fill();
 
-            // Head gets extra outline & eyes
+            // FROZEN: Frost tint overlay per segment
+            if (isFrozen) {
+                const frostGrad = ctx.createLinearGradient(x, y, x + segSize, y + segSize);
+                frostGrad.addColorStop(0, 'rgba(0,0,0,0)');
+                frostGrad.addColorStop(1, 'rgba(147, 197, 253, 0.35)');
+                ctx.fillStyle = frostGrad;
+                drawRoundedRect(ctx, x + 1, y + 1, segSize - 2, segSize - 2, radius - 0.5);
+                ctx.fill();
+            }
+
+            // Head extras (eyes, outline) + FROZEN CRYSTALS
             if (index === 0) {
                 // White border
                 ctx.lineWidth = Math.max(2, tileSize * 0.08);
@@ -265,6 +346,30 @@ export function drawGame() {
                 ctx.arc(eye1x, eyeY, eyeRadius, 0, Math.PI * 2);
                 ctx.arc(eye2x, eyeY, eyeRadius, 0, Math.PI * 2);
                 ctx.fill();
+
+                // FROZEN: Ice shards on head
+                if (isFrozen) {
+                    const hcx = x + segSize / 2;
+                    const hcy = y + segSize / 2;
+                    ctx.fillStyle = '#e0f2fe';
+                    ctx.strokeStyle = '#0ea5e9';
+                    ctx.lineWidth = 1.2;
+                    ctx.lineJoin = 'round';
+                    const shardLen = 7;
+                    for (let i = 0; i < 6; i++) {
+                        ctx.save();
+                        ctx.translate(hcx, hcy);
+                        ctx.rotate(i * Math.PI / 3);
+                        ctx.beginPath();
+                        ctx.moveTo(shardLen * 0.3, 0);
+                        ctx.lineTo(0, -shardLen);
+                        ctx.lineTo(-shardLen * 0.3, 0);
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.stroke();
+                        ctx.restore();
+                    }
+                }
             }
         });
 

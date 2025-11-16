@@ -2,17 +2,23 @@
 import { getUserId, getGameState, getRoomCode, getTimerIntervalId, setTimerIntervalId } from './state.js';
 
 function getPowerupHtml(player) {
-    if (!player.activePowerups || player.activePowerups.length === 0) return '';
-    return player.activePowerups.map(effect => {
+    const now = Date.now();
+    let html = '';
+    (player.activePowerups || []).forEach(effect => {
+        if (effect.endTime <= now) return;
+        let emoji = '', colorCls = '';
         switch (effect.type) {
-            case 'invincible':
-                return '<span class="text-yellow-400 text-xl ml-1 animate-pulse">⭐</span>';
-            case 'speed_boost':
-                return '<span class="text-blue-400 text-xl ml-1 animate-pulse">⚡</span>';
-            default:
-                return '';
+            case 'invincible': emoji = '⭐'; colorCls = 'text-yellow-400'; break;
+            case 'speed_boost': emoji = '⚡'; colorCls = 'text-blue-400'; break;
+            case 'multiplier': emoji = '💎'; colorCls = 'text-emerald-400'; break;
+            case 'freeze': emoji = '❄️'; colorCls = 'text-sky-400'; break;
         }
-    }).join('');
+        if (emoji) html += `<span class="${colorCls} text-xl ml-1 animate-pulse">${emoji}</span>`;
+    });
+    if (player.frozenUntil && player.frozenUntil > now) {
+        html += '<span class="text-cyan-300 text-lg ml-1 animate-ping">🧊</span>';
+    }
+    return html;
 }
 
 // Screen elements
