@@ -432,39 +432,103 @@ function drawGame() {
 
 function updateScoreboard(players) {
     scoreBoard.innerHTML = '';
-    Object.values(players).sort((a,b) => b.score - a.score).forEach(p => {
+    
+    // --- CRITICAL FIX: Implement two-level sorting ---
+    const sortedPlayers = Object.values(players).sort((a, b) => {
+        // 1. Primary Sort: Alive status (true = -1, false = 1). Alive players first.
+        if (a.isAlive !== b.isAlive) {
+            return a.isAlive ? -1 : 1; 
+        }
+        // 2. Secondary Sort: Score (descending). Higher score first.
+        return b.score - a.score;
+    });
+    // --- END CRITICAL FIX ---
+
+    sortedPlayers.forEach(p => {
         const isMe = p.socketId === userId;
         const scoreEl = document.createElement('div');
-        scoreEl.className = 'flex items-center text-lg font-bold';
+        scoreEl.className = 'flex items-center text-lg font-bold justify-between'; // Added justify-between
+        
+        let colorClass = '';
+        let statusText = '';
+        
         if (!p.isAlive) {
-            scoreEl.classList.add('line-through', 'opacity-50');
+            // Apply gray color and line-through for dead snakes
+            scoreEl.classList.add('line-through', 'opacity-50', 'text-gray-400');
+            statusText = '(DEAD)';
+        } else if (isMe) {
+            // Highlight self if alive
+            colorClass = 'text-green-400';
+            statusText = '(You)';
         }
+        
+        // Use a <span> for the score to allow for the status text
         scoreEl.innerHTML = `
-            <span class="player-color-dot" style="background-color: ${p.color}"></span>
-            <span>${p.score} ${isMe ? '(You)' : ''}</span>
+            <div class="flex items-center space-x-2">
+                <span class="player-color-dot" style="background-color: ${p.color}"></span>
+                <span class="${colorClass}">${p.id} ${statusText}</span>
+            </div>
+            <span>${p.score}</span>
         `;
         scoreBoard.appendChild(scoreEl);
     });
 }
 
 function updateFinalScores(players) {
+    if (!localGameState || localGameState.gameState !== 'gameover') return;
+
     finalScores.innerHTML = '';
-    const sortedPlayers = Object.values(players).sort((a, b) => b.score - a.score);
     
+    // 1. Determine the winner among ALIVE players
+    const alivePlayers = Object.values(players).filter(p => p.isAlive);
+    
+    // Sort alive players by score to find the true winner
+    alivePlayers.sort((a, b) => b.score - a.score);
+    const winnerId = alivePlayers.length > 0 ? alivePlayers[0].socketId : null;
+
+    // 2. Sort all players for the scoreboard: Alive first, then score
+    const sortedPlayers = Object.values(players).sort((a, b) => {
+        // Primary Sort: Alive status (true = -1, false = 1). Alive players first.
+        if (a.isAlive !== b.isAlive) {
+            return a.isAlive ? -1 : 1; 
+        }
+        // Secondary Sort: Score (descending). Higher score first.
+        return b.score - a.score;
+    });
+
+    // 3. Render the sorted list
     sortedPlayers.forEach((p, index) => {
-        const scoreEl = document.createElement('div');
-        scoreEl.className = 'flex items-center justify-between p-3 bg-gray-700 rounded-lg';
+        const isMe = p.socketId === userId;
+        const isWinner = p.socketId === winnerId;
+        
         let emoji = '';
-        if (index === 0) emoji = '🏆';
-        if (index === 1) emoji = '🥈';
-        if (index === 2) emoji = '🥉';
+        let colorClass = 'text-slate-300';
+        let statusText = '';
+
+        if (p.isAlive) {
+            if (index === 0) emoji = ' 🏆';
+            if (index === 1) emoji = ' 🥈';
+            if (index === 2) emoji = ' 🥉';
+        }
+        
+        if (isWinner) {
+            colorClass = 'text-yellow-400';
+        } else if (!p.isAlive) {
+            statusText = '(Eliminated)';
+            colorClass = 'text-gray-500'; // Darker gray for dead players
+        } else if (isMe) {
+            colorClass = 'text-blue-400';
+        }
+        
+        const scoreEl = document.createElement('div');
+        scoreEl.className = `flex items-center text-lg justify-between p-2 rounded-lg ${!p.isAlive ? 'line-through opacity-70' : 'bg-slate-700/50'}`;
         
         scoreEl.innerHTML = `
             <div class="flex items-center">
                 <span class="player-color-dot" style="background-color: ${p.color}"></span>
-                <span class="font-medium">${p.id}</span>
+                <span class="font-medium ${colorClass}">${p.id} ${statusText}</span>
             </div>
-            <span class="font-bold text-xl">${p.score} ${emoji}</span>
+            <span class="font-bold text-xl ${colorClass}">${p.score}${emoji}</span>
         `;
         finalScores.appendChild(scoreEl);
     });
