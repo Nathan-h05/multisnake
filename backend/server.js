@@ -137,7 +137,7 @@ function checkCollision(head, state) {
             // Skip checking our own head against itself
             if (playerId === head.socketId && i === 0) continue; 
             
-            if (head.x === otherSnake[i].x && head.y === otherSnake[i].y) {
+            if (otherSnake.isAlive && head.x === otherSnake[i].x && head.y === otherSnake[i].y) {
                 return true;
             }
         }
