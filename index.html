@@ -6,77 +6,7 @@
     <title>Multiplayer Snake</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #0f172a; /* Slate 900 */
-            color: #f8fafc; /* Slate 50 */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            margin: 0;
-            padding: 20px;
-        }
-        .container {
-            max-width: 900px;
-            width: 100%;
-            background-color: #1e293b; /* Slate 800 */
-            border-radius: 12px;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-            padding: 20px;
-        }
-        canvas {
-            border-radius: 8px;
-            border: 4px solid #334155; /* Slate 700 */
-            transition: transform 0.1s ease-out;
-        }
-        .btn-primary {
-            background-color: #3b82f6; /* Blue 500 */
-            color: white;
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-weight: bold;
-            transition: background-color 0.2s, transform 0.1s;
-        }
-        .btn-primary:hover {
-            background-color: #2563eb; /* Blue 600 */
-            transform: translateY(-1px);
-        }
-        .btn-secondary {
-            background-color: #475569; /* Slate 600 */
-            color: white;
-            padding: 8px 16px;
-            border-radius: 8px;
-            transition: background-color 0.2s;
-        }
-        .btn-secondary:hover {
-            background-color: #334155; /* Slate 700 */
-        }
-        .input-field {
-            background-color: #334155; /* Slate 700 */
-            color: white;
-            padding: 10px;
-            border-radius: 8px;
-            border: none;
-            width: 100%;
-        }
-        .player-color-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            margin-right: 8px;
-            display: inline-block;
-        }
-        /* Toast notification styles */
-        #error-toast {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
-        }
-    </style>
+    <link rel="stylesheet" href="/styles.css">
 </head>
 <body class="selection:bg-indigo-300 selection:text-indigo-900">
 
