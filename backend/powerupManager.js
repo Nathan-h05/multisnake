@@ -79,11 +79,19 @@ function generatePowerupPosition(gridSize, players, food, existingPowerups) {
             y: Math.floor(Math.random() * gridSize)
         };
 
-        // Check food overlap
-        if (position.x === food.x && position.y === food.y) {
+        // Check food overlap (food is now an array)
+        if (Array.isArray(food)) {
+            for (const foodItem of food) {
+                if (position.x === foodItem.x && position.y === foodItem.y) {
+                    overlap = true;
+                    break;
+                }
+            }
+        } else if (food && position.x === food.x && position.y === food.y) {
+            // Backward compatibility for single food object
             overlap = true;
-            continue;
         }
+        if (overlap) continue;
 
         // Check existing powerups overlap
         for (const powerup of existingPowerups) {

@@ -1,4 +1,4 @@
-const { gameStates, generateRoomCode, getAvailableColor, createGameState, initPlayer, updateGameState, cleanupPowerupsForRoom } = require('./gameManager');
+const { gameStates, generateRoomCode, getAvailableColor, createGameState, initPlayer, updateGameState, cleanupPowerupsForRoom, generateMultipleFood, calculateAppleCount } = require('./gameManager');
 const { getActivePowerups } = require('./powerupManager');
 const GameResult = require('./models/GameResult');
 
@@ -111,13 +111,16 @@ function initSocket(io) {
             const requestedSpeed = (data && data.speed) ? data.speed.toUpperCase() : DEFAULT_SPEED;
             const gameSpeed = SPEED_SETTINGS[requestedSpeed] ? requestedSpeed : DEFAULT_SPEED;
 
+            // Handle apple count setting
+            const DEFAULT_APPLE_COUNT = 'EQUAL';
+            const appleCountSetting = (data && data.appleCount) ? data.appleCount : DEFAULT_APPLE_COUNT;
 
             if (typeof callback !== 'function') { console.error('createRoom callback missing'); return; }
 
             const roomCode = generateRoomCode();
             if (gameStates[roomCode]) { callback({ success: false, message: 'Room code collision' }); return; }
 
-            const state = createGameState(roomCode, socket.id, gridSize, hostName);
+            const state = createGameState(roomCode, socket.id, gridSize, hostName, appleCountSetting);
             state.gameDurationSeconds = durationSeconds;
             state.gameSpeed = gameSpeed; // Save the selected speed key
             gameStates[roomCode] = state;
@@ -147,10 +150,17 @@ function initSocket(io) {
             const state = gameStates[roomCode];
             if (!state || state.hostId !== socket.id || state.gameState !== 'waiting') return;
             if (Object.keys(state.players).length < 1) { console.log(`Cannot start room ${roomCode}: not enough players.`); return; }
+            
+            // Initialize food array based on apple count setting
+            const playerCount = Object.keys(state.players).length;
+            const appleCountSetting = state.appleCountSetting || 'EQUAL';
+            const targetAppleCount = calculateAppleCount(appleCountSetting, playerCount);
+            state.food = generateMultipleFood(state.gridSize, targetAppleCount, state.players);
+            
             state.gameState = 'playing';
             state.startTime = Date.now(); // track when this game started
             if (state.gameDurationSeconds && Number.isFinite(state.gameDurationSeconds)) state.endTime = Date.now() + state.gameDurationSeconds * 1000;
-            console.log(`Game started in room ${roomCode}`);
+            console.log(`Game started in room ${roomCode} with ${targetAppleCount} apples (setting: ${appleCountSetting}, players: ${playerCount})`);
             // start loop
             startGameLoop(io, roomCode);
             io.to(roomCode).emit('gameState', state);
@@ -180,9 +190,10 @@ function initSocket(io) {
                 gameState: 'waiting',
                 gridSize: state.gridSize,
                 players: newPlayers,
-                food: state.food,
+                food: [], // Will be regenerated on start
                 gameDurationSeconds: state.gameDurationSeconds || 120,
                 gameSpeed: state.gameSpeed || 'NORMAL', // Persist game speed
+                appleCountSetting: state.appleCountSetting || 'EQUAL', // Persist apple count setting
             };
             // remove any running loop
             stopGameLoop(roomCode);
