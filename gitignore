@@ -1,0 +1,36 @@
+# Node modules
+node_modules/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Build / cache
+dist/
+.cache/
+.tmp/
+coverage/
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# VSCode
+.vscode/
+
+# Render deployment cache
+render.yaml
+
+# Lock files (optional — keep if you want exact versions)
+# package-lock.json
+# yarn.lock
+

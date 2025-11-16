@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Multiplayer Snake</title>
+    <style>
+        body {
+            margin: 0;
+            background: #111;
+            color: #eee;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        #game {
+            border: 1px solid #555;
+            background: #000;
+            image-rendering: pixelated;
+        }
+
+        #info {
+            margin-top: 10px;
+            font-size: 14px;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="game" width="800" height="600"></canvas>
+    <div id="info">
+        Use the arrow keys to move.<br />
+        Open this URL in multiple tabs or computers to play together.
+    </div>
+
+    <!-- Socket.IO client -->
+    <script src="/socket.io/socket.io.js"></script>
+    <!-- Your game client -->
+    <script src="client.js"></script>
+</body>
+
+</html>
