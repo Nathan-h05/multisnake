@@ -3,19 +3,38 @@ const { gameStates, generateRoomCode, getAvailableColor, createGameState, initPl
 // Map roomCode -> intervalId for game loops
 const gameIntervals = {};
 
+// NEW: Define speed settings (ticks per second -> interval delay in ms)
+const SPEED_SETTINGS = {
+    'SLOW': { ticksPerSecond: 4, label: 'Slow' },
+    'NORMAL': { ticksPerSecond: 8, label: 'Normal' },
+    'FAST': { ticksPerSecond: 12, label: 'Fast' },
+    'BLAZING': { ticksPerSecond: 16, label: 'Blazing' },
+};
+
+function getIntervalDelay(speedKey) {
+    const setting = SPEED_SETTINGS[speedKey] || SPEED_SETTINGS.NORMAL;
+    // Calculate interval delay in milliseconds
+    return 1000 / setting.ticksPerSecond;
+}
+
 function startGameLoop(io, roomCode) {
-    if (gameIntervals[roomCode]) return;
+    const state = gameStates[roomCode];
+    if (!state || gameIntervals[roomCode]) return;
+    
+    // Use the speed setting stored in the game state
+    const delay = getIntervalDelay(state.gameSpeed);
+
     gameIntervals[roomCode] = setInterval(() => {
         const isGameOver = updateGameState(roomCode);
-        const state = gameStates[roomCode];
+        const currentState = gameStates[roomCode];
         // emit to room
-        io.to(roomCode).emit('gameState', state);
+        io.to(roomCode).emit('gameState', currentState);
         if (isGameOver) {
             clearInterval(gameIntervals[roomCode]);
             delete gameIntervals[roomCode];
             console.log(`Game loop stopped for room ${roomCode}`);
         }
-    }, 1000 / 8);
+    }, delay); // Use the custom delay
 }
 
 function stopGameLoop(roomCode) {
@@ -39,6 +58,12 @@ function initSocket(io) {
             const DEFAULT_DURATION_SECONDS = 120;
             const requestedDuration = (data && data.durationSeconds) ? parseInt(data.durationSeconds, 10) : DEFAULT_DURATION_SECONDS;
             const durationSeconds = Math.max(10, Math.min(3600, requestedDuration));
+            
+            // NEW: Handle speed setting
+            const DEFAULT_SPEED = 'NORMAL';
+            const requestedSpeed = (data && data.speed) ? data.speed.toUpperCase() : DEFAULT_SPEED;
+            const gameSpeed = SPEED_SETTINGS[requestedSpeed] ? requestedSpeed : DEFAULT_SPEED;
+
 
             if (typeof callback !== 'function') { console.error('createRoom callback missing'); return; }
 
@@ -47,9 +72,10 @@ function initSocket(io) {
 
             const state = createGameState(roomCode, socket.id, gridSize, hostName);
             state.gameDurationSeconds = durationSeconds;
+            state.gameSpeed = gameSpeed; // Save the selected speed key
             gameStates[roomCode] = state;
             socket.join(roomCode);
-            console.log(`[CREATE] Room created: ${roomCode} by ${socket.id}`);
+            console.log(`[CREATE] Room created: ${roomCode} by ${socket.id} with speed ${gameSpeed}`);
             callback({ success: true, roomCode, state });
         });
 
@@ -106,8 +132,9 @@ function initSocket(io) {
                 gameState: 'waiting',
                 gridSize: state.gridSize,
                 players: newPlayers,
-                food: generateRoomCode() ? state.food : state.food, // noop but keep field
+                food: state.food,
                 gameDurationSeconds: state.gameDurationSeconds || 120,
+                gameSpeed: state.gameSpeed || 'NORMAL', // Persist game speed
             };
             // remove any running loop
             stopGameLoop(roomCode);
