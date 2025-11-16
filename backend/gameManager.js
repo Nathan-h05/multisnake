@@ -9,6 +9,10 @@ const {
     cleanupPowerupsForRoom,
 } = require('./powerupManager');
 
+// Extracted modules for cleaner organization
+const { generateFood, calculateAppleCount, generateMultipleFood, checkFood } = require('./game/foodManager');
+const { detectFatalCollisions, checkBodyCollision } = require('./game/collisionHandler');
+
 const DEFAULT_GRID_SIZE = 20;
 
 const gameStates = {};
@@ -43,79 +47,7 @@ function getAvailableColor(players) {
     return availableColors[0] || '#64748b';
 }
 
-function generateFood(gridSize) {
-    const x = Math.floor(Math.random() * gridSize);
-    const y = Math.floor(Math.random() * gridSize);
-
-    // 80% normal food, 10% double-score, 10% speed-boost
-    const r = Math.random();
-    let type = 'normal';
-    let grow = true;      // whether eating this increases snake length
-    let score = 1;        // how many points
-
-    // if (r > 0.8 && r <= 0.9) {
-    //     type = 'doubleScore';
-    //     score = 2;
-    //     grow = true;      // still grows
-    // } else if (r > 0.9) {
-    //     type = 'speedBoost';
-    //     score = 1;
-    //     grow = false;     // no extra length, just buff
-    // }
-
-    return { x, y, type, grow, score };
-}
-
-function calculateAppleCount(setting, playerCount) {
-    switch (setting) {
-        case 'EQUAL':
-            return playerCount;
-        case 'HALF':
-            return Math.max(1, Math.floor(playerCount / 2));
-        default:
-            // Fixed number (1, 2, 3, or 4)
-            return parseInt(setting) || 1;
-    }
-}
-
-function generateMultipleFood(gridSize, count, players, existingFood = []) {
-    const foodArray = [...existingFood];
-    let attempts = 0;
-    const maxAttempts = 100;
-
-    while (foodArray.length < count && attempts < maxAttempts) {
-        const newFood = generateFood(gridSize);
-        let overlap = false;
-
-        // Check overlap with existing food
-        for (const food of foodArray) {
-            if (food.x === newFood.x && food.y === newFood.y) {
-                overlap = true;
-                break;
-            }
-        }
-
-        // Check overlap with snake segments
-        if (!overlap) {
-            for (const player of Object.values(players)) {
-                for (const segment of player.snake) {
-                    if (segment.x === newFood.x && segment.y === newFood.y) {
-                        overlap = true;
-                        break;
-                    }
-                }
-                if (overlap) break;
-            }
-        }
-
-        if (!overlap) {
-            foodArray.push(newFood);
-        }
-        attempts++;
-    }
-
-    return foodArray;
-}
+// Food functions now imported from game/foodManager.js
 
 function initPlayer(socketId, color, gridSize, playerIndex, name) {
     const q = Math.floor(gridSize / 4);
@@ -164,118 +96,7 @@ function createGameState(roomCode, hostId, gridSize, hostName, appleCountSetting
     return initialState;
 }
 
-/**
- * Checks if a head position collides with any snake body segment (including its own, 
- * but excluding the segment it's about to leave).
- * Note: Head-on collision is handled in detectFatalCollisions.
- * POWERUP: If attacker is invincible, they pass through all bodies. Returns false.
- */
-function checkBodyCollision(head, state) {
-    const { players } = state;
-    const attackingPlayer = players[head.socketId];
-    
-    // Invincible players pass through all bodies
-    if (attackingPlayer && hasActivePowerup(attackingPlayer, 'invincible')) {
-        return false;
-    }
-    
-    // Check against ALL snake bodies
-    for (const playerId of Object.keys(players)) {
-        const otherSnake = players[playerId].snake;
-        // Skip collision against dead snakes
-        if (!players[playerId].isAlive) continue; 
-        
-        // Loop over all segments of the other snake
-        for (let i = 0; i < otherSnake.length; i++) {
-            // Self-collision: skip the current tail and the current head
-            if (playerId === head.socketId && i > 0 && i === otherSnake.length - 1 && !checkFood(head, state)) {
-                // Skip the tail segment if the snake is NOT growing (not eating food)
-                continue;
-            }
-            if (playerId === head.socketId && i === 0) {
-                // Skip the current head segment
-                continue;
-            }
-
-            // Standard segment collision
-            if (head.x === otherSnake[i].x && head.y === otherSnake[i].y) return true;
-        }
-    }
-    return false;
-}
-
-/**
- * NEW: Detects collisions based on pre-calculated nextHead positions.
- * Returns a Set of socketIds that must die this tick.
- * POWERUP: Invincible players survive all collisions. Non-invincible players die when hitting invincible bodies.
- */
-function detectFatalCollisions(state) {
-    const fatalities = new Set();
-    const activePlayerHeads = Object.values(state.players)
-        .filter(p => p.isAlive && p.nextHead)
-        .map(p => p.nextHead);
-    
-    // --- 1. Check Head-to-Head Collisions ---
-    // Create a map of positions to the number of heads moving there
-    const headCounts = {};
-    activePlayerHeads.forEach(head => {
-        const posKey = `${head.x},${head.y}`;
-        headCounts[posKey] = headCounts[posKey] || [];
-        headCounts[posKey].push(head.socketId);
-    });
-
-    // If more than one head lands on the same tile, check invincibility
-    Object.values(headCounts).forEach(socketIds => {
-        if (socketIds.length > 1) {
-            // Find invincible players in this collision
-            const invincibleIds = socketIds.filter(id => hasActivePowerup(state.players[id], 'invincible'));
-            
-            if (invincibleIds.length > 0) {
-                // Invincible players survive, others die
-                socketIds.forEach(id => {
-                    if (!invincibleIds.includes(id)) {
-                        fatalities.add(id);
-                    }
-                });
-            } else {
-                // No invincible players - all die
-                socketIds.forEach(id => fatalities.add(id));
-            }
-        }
-    });
-
-    // --- 2. Check Head-to-Body/Wall Collisions ---
-    activePlayerHeads.forEach(head => {
-        const attackingPlayer = state.players[head.socketId];
-        
-        // Invincible players ignore boundaries
-        if (!hasActivePowerup(attackingPlayer, 'invincible')) {
-            // Check map boundaries
-            if (head.x < 0 || head.x >= state.gridSize || head.y < 0 || head.y >= state.gridSize) {
-                fatalities.add(head.socketId);
-                return;
-            }
-        }
-        
-        // Check collision against all snake bodies
-        // checkBodyCollision already handles invincible attacker logic
-        if (checkBodyCollision(head, state)) {
-            fatalities.add(head.socketId);
-        }
-    });
-    
-    return fatalities;
-}
-
-function checkFood(head, state) {
-    // Check if head collides with any food in the array
-    for (let i = 0; i < state.food.length; i++) {
-        if (head.x === state.food[i].x && head.y === state.food[i].y) {
-            return i; // Return the index of the collected food
-        }
-    }
-    return -1; // No food collected
-}
+// Collision detection functions now imported from game/collisionHandler.js
 
 // updateGameState is pure-ish: modifies state but does not emit sockets or manage intervals
 function updateGameState(roomCode) {
