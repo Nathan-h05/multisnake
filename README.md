@@ -63,7 +63,10 @@ project-root/
 ├── package.json
 └── README.md
 
-🛠 Tech Stack
+---
+
+
+## 🛠 Tech Stack
 
 Backend
 
@@ -89,7 +92,9 @@ socketHandlers.js → Socket.IO events + game loop
 
 server.js → Express + Socket.IO server bootstrap
 
-⚙️ Installation & Setup
+---
+
+## ⚙️ Installation & Setup
 1. Clone the repository
 git clone <YOUR-REPO-URL> multisnake
 cd multisnake
@@ -104,7 +109,9 @@ npm start
 By default the server runs on http://localhost:3000
 .
 
-🎮 How to Play
+---
+
+## 🎮 How to Play
 
 Open the game in your browser:
 http://localhost:3000
@@ -161,7 +168,9 @@ Final scores with ranking and emojis 🏆🥈🥉
 
 Host can click “Play Again (Host Only)” to reset snakes and replay with the same settings.
 
-🧪 Game Logic Highlights
+---
+
+## 🧪 Game Logic Highlights
 
 Each room has its own game state in gameManager.js:
 
@@ -187,7 +196,9 @@ Move surviving snakes, grow if food eaten.
 
 Respawn food on free tiles.
 
-👥 Contributors
+---
+
+## 👥 Contributors
 
 Guido He
 
@@ -197,7 +208,9 @@ Radman Mohammadi
 
 Nathan Hilde
 
-🧰 Future Improvements
+---
+
+## 🧰 Future Improvements
 
 In-game chat per room
 
@@ -207,7 +220,9 @@ Mobile-friendly touch controls
 
 Persistent high scores & player stats
 
-📄 License
+---
+
+## 📄 License
 
 This project is for educational and hackathon use.
 Feel free to fork and extend it for your own learning or projects.
