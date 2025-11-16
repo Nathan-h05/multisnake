@@ -70,6 +70,74 @@ function drawApple(ctx, gridX, gridY, tileSize) {
     ctx.fill();
 }
 
+function drawPowerup(ctx, powerup, tileSize) {
+    const cx = powerup.x * tileSize + tileSize / 2;
+    const cy = powerup.y * tileSize + tileSize / 2;
+    const radius = tileSize * 0.4;
+
+    if (powerup.type === 'invincible') {
+        // Gold glowing circle
+        const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius * 1.5);
+        gradient.addColorStop(0, 'rgba(251, 191, 36, 0.8)');
+        gradient.addColorStop(0.5, 'rgba(251, 191, 36, 0.4)');
+        gradient.addColorStop(1, 'rgba(251, 191, 36, 0)');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius * 1.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Star shape
+        ctx.fillStyle = '#fbbf24';
+        ctx.beginPath();
+        for (let i = 0; i < 5; i++) {
+            const angle = (i * 4 * Math.PI) / 5 - Math.PI / 2;
+            const x = cx + Math.cos(angle) * radius;
+            const y = cy + Math.sin(angle) * radius;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        // Highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.beginPath();
+        ctx.arc(cx - radius * 0.2, cy - radius * 0.2, radius * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+
+    } else if (powerup.type === 'speed_boost') {
+        // Blue glowing circle
+        const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius * 1.5);
+        gradient.addColorStop(0, 'rgba(59, 130, 246, 0.8)');
+        gradient.addColorStop(0.5, 'rgba(59, 130, 246, 0.4)');
+        gradient.addColorStop(1, 'rgba(59, 130, 246, 0)');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius * 1.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Lightning bolt
+        ctx.fillStyle = '#3b82f6';
+        ctx.beginPath();
+        const boltWidth = radius * 0.8;
+        const boltHeight = radius * 1.4;
+        ctx.moveTo(cx + boltWidth * 0.1, cy - boltHeight * 0.5);
+        ctx.lineTo(cx - boltWidth * 0.3, cy);
+        ctx.lineTo(cx + boltWidth * 0.1, cy);
+        ctx.lineTo(cx - boltWidth * 0.1, cy + boltHeight * 0.5);
+        ctx.lineTo(cx + boltWidth * 0.3, cy);
+        ctx.lineTo(cx - boltWidth * 0.1, cy);
+        ctx.closePath();
+        ctx.fill();
+
+        // Highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.beginPath();
+        ctx.arc(cx - radius * 0.2, cy - radius * 0.3, radius * 0.25, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
 export function drawGame() {
     const localGameState = getGameState();
     if (!localGameState) return;
@@ -107,12 +175,58 @@ export function drawGame() {
     // Draw apple (fancy)
     drawApple(ctx, food.x, food.y, tileSize);
 
+    // Draw powerups
+    if (localGameState.powerups && Array.isArray(localGameState.powerups)) {
+        localGameState.powerups.forEach(powerup => {
+            drawPowerup(ctx, powerup, tileSize);
+        });
+    }
+
     // Draw snakes
     Object.values(players).forEach(p => {
         const isDead = !p.isAlive;
 
+        // Explicitly compute active powerups (with time check for safety)
+        const now = Date.now();
+        const hasInvincible = p.activePowerups?.some(effect => effect.type === 'invincible' && effect.endTime > now) || false;
+        const hasSpeedBoost = p.activePowerups?.some(effect => effect.type === 'speed_boost' && effect.endTime > now) || false;
+
         // Make dead snakes more transparent
         ctx.globalAlpha = isDead ? 0.35 : 1.0;
+
+        // Draw powerup glow around entire snake if active
+        if (!isDead && (hasInvincible || hasSpeedBoost)) {
+            const head = p.snake[0];
+            const headCenterX = head.x * tileSize + tileSize / 2;
+            const headCenterY = head.y * tileSize + tileSize / 2;
+            
+            const isInvincibleGlow = hasInvincible;
+            const glowRgb = isInvincibleGlow ? [251, 191, 36] : [59, 130, 246];
+            
+            // Pulsing alpha for outer glow (0.3 to 0.7, cycles every ~500ms)
+            const pulse = 0.3 + 0.4 * (Math.sin(Date.now() / 250) * 0.5 + 0.5);
+            const outerGlowColor = `rgba(${glowRgb[0]}, ${glowRgb[1]}, ${glowRgb[2]}, ${pulse})`;
+            
+            // LAYER 1: Bright inner core (fixed high alpha)
+            ctx.fillStyle = `rgba(${glowRgb[0]}, ${glowRgb[1]}, ${glowRgb[2]}, 0.9)`;
+            ctx.beginPath();
+            ctx.arc(headCenterX, headCenterY, tileSize * 0.5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // LAYER 2: Large fading outer glow (pulsing)
+            const gradient = ctx.createRadialGradient(
+                headCenterX, headCenterY, 0,
+                headCenterX, headCenterY, tileSize * 1.8
+            );
+            gradient.addColorStop(0, outerGlowColor);
+            gradient.addColorStop(0.6, `rgba(${glowRgb[0]}, ${glowRgb[1]}, ${glowRgb[2]}, ${pulse * 0.4})`);
+            gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(headCenterX, headCenterY, tileSize * 1.8, 0, Math.PI * 2);
+            ctx.fill();
+        }
 
         // Slight padding to make segments rounded & separated
         const segPadding = tileSize * 0.15;
@@ -158,7 +272,7 @@ export function drawGame() {
         const head = p.snake[0];
         if (head && p.name) {
             const nameX = head.x * tileSize + tileSize / 2;
-            const nameY = head.y * tileSize - tileSize * 0.2;
+            let nameY = head.y * tileSize - tileSize * 0.2;
 
             ctx.globalAlpha = isDead ? 0.5 : 0.9;
             ctx.font = `${Math.max(12, tileSize * 0.5)}px Inter`;
@@ -171,6 +285,24 @@ export function drawGame() {
 
             ctx.fillStyle = '#e5e7eb';
             ctx.fillText(p.name, nameX, nameY);
+
+            // Draw powerup icon(s) above name
+            if (!isDead && (hasInvincible || hasSpeedBoost)) {
+                const iconSize = Math.max(16, tileSize * 0.6);
+                const iconY = nameY - iconSize * 0.8;
+                ctx.font = `${iconSize}px Inter`;
+                ctx.textBaseline = 'middle';
+                
+                if (hasInvincible && hasSpeedBoost) {
+                    // Both powerups - draw side by side
+                    ctx.fillText('⭐', nameX - iconSize * 0.6, iconY);
+                    ctx.fillText('⚡', nameX + iconSize * 0.6, iconY);
+                } else if (hasInvincible) {
+                    ctx.fillText('⭐', nameX, iconY);
+                } else if (hasSpeedBoost) {
+                    ctx.fillText('⚡', nameX, iconY);
+                }
+            }
         }
 
         // Reset alpha for next player

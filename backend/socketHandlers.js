@@ -1,4 +1,5 @@
-const { gameStates, generateRoomCode, getAvailableColor, createGameState, initPlayer, updateGameState } = require('./gameManager');
+const { gameStates, generateRoomCode, getAvailableColor, createGameState, initPlayer, updateGameState, cleanupPowerupsForRoom } = require('./gameManager');
+const { getActivePowerups } = require('./powerupManager');
 const GameResult = require('./models/GameResult');
 
 // Map roomCode -> intervalId for game loops
@@ -63,8 +64,13 @@ function startGameLoop(io, roomCode) {
     gameIntervals[roomCode] = setInterval(() => {
         const isGameOver = updateGameState(roomCode);
         const currentState = gameStates[roomCode];
-        io.to(roomCode).emit('gameState', currentState);
-
+        
+        // Include powerups in the state emission
+        const powerups = getActivePowerups(roomCode);
+        const stateWithPowerups = { ...currentState, powerups };
+        
+        // emit to room
+        io.to(roomCode).emit('gameState', stateWithPowerups);
         if (isGameOver) {
             clearInterval(gameIntervals[roomCode]);
             delete gameIntervals[roomCode];
@@ -194,6 +200,7 @@ function initSocket(io) {
                 delete state.players[socket.id];
                 if (Object.keys(state.players).length === 0) {
                     stopGameLoop(roomToClean);
+                    cleanupPowerupsForRoom(roomToClean);
                     delete gameStates[roomToClean];
                     console.log(`Room ${roomToClean} deleted.`);
                     return;
