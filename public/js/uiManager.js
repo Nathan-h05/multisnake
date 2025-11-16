@@ -1,6 +1,20 @@
 // UI management for screens, toasts, scoreboards, and player lists
 import { getUserId, getGameState, getRoomCode, getTimerIntervalId, setTimerIntervalId } from './state.js';
 
+function getPowerupHtml(player) {
+    if (!player.activePowerups || player.activePowerups.length === 0) return '';
+    return player.activePowerups.map(effect => {
+        switch (effect.type) {
+            case 'invincible':
+                return '<span class="text-yellow-400 text-xl ml-1 animate-pulse">⭐</span>';
+            case 'speed_boost':
+                return '<span class="text-blue-400 text-xl ml-1 animate-pulse">⚡</span>';
+            default:
+                return '';
+        }
+    }).join('');
+}
+
 // Screen elements
 const loadingScreen = document.getElementById('loading-screen');
 const homeScreen = document.getElementById('home-screen');
@@ -101,10 +115,13 @@ export function updateScoreboard(players) {
             statusText = '(You)';
         }
         
+        const powerupHtml = getPowerupHtml(p);
+        
         scoreEl.innerHTML = `
             <div class="flex items-center space-x-2">
                 <span class="player-color-dot" style="background-color: ${p.color}"></span>
                 <span class="${colorClass}">${p.name} ${statusText}</span>
+                ${powerupHtml}
             </div>
             <span>${p.score}</span>
         `;
@@ -162,6 +179,8 @@ export function updateFinalScores(players) {
             colorClass = 'text-blue-400';
         }
         
+        const powerupHtml = getPowerupHtml(p);
+    
         const scoreEl = document.createElement('div');
         scoreEl.className = `flex items-center text-lg justify-between p-2 rounded-lg ${!p.isAlive ? 'line-through opacity-70' : 'bg-slate-700/50'}`;
         
@@ -169,6 +188,7 @@ export function updateFinalScores(players) {
             <div class="flex items-center">
                 <span class="player-color-dot" style="background-color: ${p.color}"></span>
                 <span class="font-medium ${colorClass}">${p.name} ${statusText}</span>
+                ${powerupHtml}
             </div>
             <span class="font-bold text-xl ${colorClass}">${p.score}${emoji}</span>
         `;

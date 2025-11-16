@@ -186,9 +186,10 @@ export function drawGame() {
     Object.values(players).forEach(p => {
         const isDead = !p.isAlive;
 
-        // Check for active powerups
-        const hasInvincible = p.activePowerups && p.activePowerups.some(pu => pu.type === 'invincible');
-        const hasSpeedBoost = p.activePowerups && p.activePowerups.some(pu => pu.type === 'speed_boost');
+        // Explicitly compute active powerups (with time check for safety)
+        const now = Date.now();
+        const hasInvincible = p.activePowerups?.some(effect => effect.type === 'invincible' && effect.endTime > now) || false;
+        const hasSpeedBoost = p.activePowerups?.some(effect => effect.type === 'speed_boost' && effect.endTime > now) || false;
 
         // Make dead snakes more transparent
         ctx.globalAlpha = isDead ? 0.35 : 1.0;
@@ -196,29 +197,34 @@ export function drawGame() {
         // Draw powerup glow around entire snake if active
         if (!isDead && (hasInvincible || hasSpeedBoost)) {
             const head = p.snake[0];
-            const glowColor = hasInvincible ? 'rgba(251, 191, 36, 0.4)' : 'rgba(59, 130, 246, 0.4)';
-            const glowRadius = tileSize * 0.8;
+            const headCenterX = head.x * tileSize + tileSize / 2;
+            const headCenterY = head.y * tileSize + tileSize / 2;
             
+            const isInvincibleGlow = hasInvincible;
+            const glowRgb = isInvincibleGlow ? [251, 191, 36] : [59, 130, 246];
+            
+            // Pulsing alpha for outer glow (0.3 to 0.7, cycles every ~500ms)
+            const pulse = 0.3 + 0.4 * (Math.sin(Date.now() / 250) * 0.5 + 0.5);
+            const outerGlowColor = `rgba(${glowRgb[0]}, ${glowRgb[1]}, ${glowRgb[2]}, ${pulse})`;
+            
+            // LAYER 1: Bright inner core (fixed high alpha)
+            ctx.fillStyle = `rgba(${glowRgb[0]}, ${glowRgb[1]}, ${glowRgb[2]}, 0.9)`;
+            ctx.beginPath();
+            ctx.arc(headCenterX, headCenterY, tileSize * 0.5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // LAYER 2: Large fading outer glow (pulsing)
             const gradient = ctx.createRadialGradient(
-                head.x * tileSize + tileSize / 2,
-                head.y * tileSize + tileSize / 2,
-                0,
-                head.x * tileSize + tileSize / 2,
-                head.y * tileSize + tileSize / 2,
-                glowRadius
+                headCenterX, headCenterY, 0,
+                headCenterX, headCenterY, tileSize * 1.8
             );
-            gradient.addColorStop(0, glowColor);
+            gradient.addColorStop(0, outerGlowColor);
+            gradient.addColorStop(0.6, `rgba(${glowRgb[0]}, ${glowRgb[1]}, ${glowRgb[2]}, ${pulse * 0.4})`);
             gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
             
             ctx.fillStyle = gradient;
             ctx.beginPath();
-            ctx.arc(
-                head.x * tileSize + tileSize / 2,
-                head.y * tileSize + tileSize / 2,
-                glowRadius,
-                0,
-                Math.PI * 2
-            );
+            ctx.arc(headCenterX, headCenterY, tileSize * 1.8, 0, Math.PI * 2);
             ctx.fill();
         }
 
