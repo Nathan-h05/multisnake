@@ -70,6 +70,74 @@ function drawApple(ctx, gridX, gridY, tileSize) {
     ctx.fill();
 }
 
+function drawPowerup(ctx, powerup, tileSize) {
+    const cx = powerup.x * tileSize + tileSize / 2;
+    const cy = powerup.y * tileSize + tileSize / 2;
+    const radius = tileSize * 0.4;
+
+    if (powerup.type === 'invincible') {
+        // Gold glowing circle
+        const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius * 1.5);
+        gradient.addColorStop(0, 'rgba(251, 191, 36, 0.8)');
+        gradient.addColorStop(0.5, 'rgba(251, 191, 36, 0.4)');
+        gradient.addColorStop(1, 'rgba(251, 191, 36, 0)');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius * 1.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Star shape
+        ctx.fillStyle = '#fbbf24';
+        ctx.beginPath();
+        for (let i = 0; i < 5; i++) {
+            const angle = (i * 4 * Math.PI) / 5 - Math.PI / 2;
+            const x = cx + Math.cos(angle) * radius;
+            const y = cy + Math.sin(angle) * radius;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        // Highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.beginPath();
+        ctx.arc(cx - radius * 0.2, cy - radius * 0.2, radius * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+
+    } else if (powerup.type === 'speed_boost') {
+        // Blue glowing circle
+        const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius * 1.5);
+        gradient.addColorStop(0, 'rgba(59, 130, 246, 0.8)');
+        gradient.addColorStop(0.5, 'rgba(59, 130, 246, 0.4)');
+        gradient.addColorStop(1, 'rgba(59, 130, 246, 0)');
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius * 1.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Lightning bolt
+        ctx.fillStyle = '#3b82f6';
+        ctx.beginPath();
+        const boltWidth = radius * 0.8;
+        const boltHeight = radius * 1.4;
+        ctx.moveTo(cx + boltWidth * 0.1, cy - boltHeight * 0.5);
+        ctx.lineTo(cx - boltWidth * 0.3, cy);
+        ctx.lineTo(cx + boltWidth * 0.1, cy);
+        ctx.lineTo(cx - boltWidth * 0.1, cy + boltHeight * 0.5);
+        ctx.lineTo(cx + boltWidth * 0.3, cy);
+        ctx.lineTo(cx - boltWidth * 0.1, cy);
+        ctx.closePath();
+        ctx.fill();
+
+        // Highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.beginPath();
+        ctx.arc(cx - radius * 0.2, cy - radius * 0.3, radius * 0.25, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
 export function drawGame() {
     const localGameState = getGameState();
     if (!localGameState) return;
@@ -107,12 +175,52 @@ export function drawGame() {
     // Draw apple (fancy)
     drawApple(ctx, food.x, food.y, tileSize);
 
+    // Draw powerups
+    if (localGameState.powerups && Array.isArray(localGameState.powerups)) {
+        localGameState.powerups.forEach(powerup => {
+            drawPowerup(ctx, powerup, tileSize);
+        });
+    }
+
     // Draw snakes
     Object.values(players).forEach(p => {
         const isDead = !p.isAlive;
 
+        // Check for active powerups
+        const hasInvincible = p.activePowerups && p.activePowerups.some(pu => pu.type === 'invincible');
+        const hasSpeedBoost = p.activePowerups && p.activePowerups.some(pu => pu.type === 'speed_boost');
+
         // Make dead snakes more transparent
         ctx.globalAlpha = isDead ? 0.35 : 1.0;
+
+        // Draw powerup glow around entire snake if active
+        if (!isDead && (hasInvincible || hasSpeedBoost)) {
+            const head = p.snake[0];
+            const glowColor = hasInvincible ? 'rgba(251, 191, 36, 0.4)' : 'rgba(59, 130, 246, 0.4)';
+            const glowRadius = tileSize * 0.8;
+            
+            const gradient = ctx.createRadialGradient(
+                head.x * tileSize + tileSize / 2,
+                head.y * tileSize + tileSize / 2,
+                0,
+                head.x * tileSize + tileSize / 2,
+                head.y * tileSize + tileSize / 2,
+                glowRadius
+            );
+            gradient.addColorStop(0, glowColor);
+            gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(
+                head.x * tileSize + tileSize / 2,
+                head.y * tileSize + tileSize / 2,
+                glowRadius,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+        }
 
         // Slight padding to make segments rounded & separated
         const segPadding = tileSize * 0.15;
@@ -158,7 +266,7 @@ export function drawGame() {
         const head = p.snake[0];
         if (head && p.name) {
             const nameX = head.x * tileSize + tileSize / 2;
-            const nameY = head.y * tileSize - tileSize * 0.2;
+            let nameY = head.y * tileSize - tileSize * 0.2;
 
             ctx.globalAlpha = isDead ? 0.5 : 0.9;
             ctx.font = `${Math.max(12, tileSize * 0.5)}px Inter`;
@@ -171,6 +279,24 @@ export function drawGame() {
 
             ctx.fillStyle = '#e5e7eb';
             ctx.fillText(p.name, nameX, nameY);
+
+            // Draw powerup icon(s) above name
+            if (!isDead && (hasInvincible || hasSpeedBoost)) {
+                const iconSize = Math.max(16, tileSize * 0.6);
+                const iconY = nameY - iconSize * 0.8;
+                ctx.font = `${iconSize}px Inter`;
+                ctx.textBaseline = 'middle';
+                
+                if (hasInvincible && hasSpeedBoost) {
+                    // Both powerups - draw side by side
+                    ctx.fillText('⭐', nameX - iconSize * 0.6, iconY);
+                    ctx.fillText('⚡', nameX + iconSize * 0.6, iconY);
+                } else if (hasInvincible) {
+                    ctx.fillText('⭐', nameX, iconY);
+                } else if (hasSpeedBoost) {
+                    ctx.fillText('⚡', nameX, iconY);
+                }
+            }
         }
 
         // Reset alpha for next player

@@ -1,4 +1,14 @@
 // Pure game logic and in-memory state. No Socket.IO or HTTP here.
+const {
+    trySpawnPowerup,
+    checkPowerupCollection,
+    applyPowerupToPlayer,
+    updatePlayerPowerups,
+    hasActivePowerup,
+    initPowerupsForRoom,
+    cleanupPowerupsForRoom,
+} = require('./powerupManager');
+
 const DEFAULT_GRID_SIZE = 20;
 
 const gameStates = {};
@@ -81,6 +91,10 @@ function createGameState(roomCode, hostId, gridSize, hostName) {
         food: generateFood(gridSize || DEFAULT_GRID_SIZE),
     };
     initialState.players[hostId] = initPlayer(hostId, playerColor, initialState.gridSize, 0, hostName);
+    
+    // Initialize powerup tracking for this room
+    initPowerupsForRoom(roomCode);
+    
     return initialState;
 }
 
@@ -88,9 +102,17 @@ function createGameState(roomCode, hostId, gridSize, hostName) {
  * Checks if a head position collides with any snake body segment (including its own, 
  * but excluding the segment it's about to leave).
  * Note: Head-on collision is handled in detectFatalCollisions.
+ * POWERUP: If attacker is invincible, they pass through all bodies. Returns false.
  */
 function checkBodyCollision(head, state) {
     const { players } = state;
+    const attackingPlayer = players[head.socketId];
+    
+    // Invincible players pass through all bodies
+    if (attackingPlayer && hasActivePowerup(attackingPlayer, 'invincible')) {
+        return false;
+    }
+    
     // Check against ALL snake bodies
     for (const playerId of Object.keys(players)) {
         const otherSnake = players[playerId].snake;
@@ -119,11 +141,12 @@ function checkBodyCollision(head, state) {
 /**
  * NEW: Detects collisions based on pre-calculated nextHead positions.
  * Returns a Set of socketIds that must die this tick.
+ * POWERUP: Invincible players survive all collisions. Non-invincible players die when hitting invincible bodies.
  */
 function detectFatalCollisions(state) {
     const fatalities = new Set();
     const activePlayerHeads = Object.values(state.players)
-        .filter(p => p.isAlive)
+        .filter(p => p.isAlive && p.nextHead)
         .map(p => p.nextHead);
     
     // --- 1. Check Head-to-Head Collisions ---
@@ -135,22 +158,41 @@ function detectFatalCollisions(state) {
         headCounts[posKey].push(head.socketId);
     });
 
-    // If more than one head lands on the same tile, they all die
+    // If more than one head lands on the same tile, check invincibility
     Object.values(headCounts).forEach(socketIds => {
         if (socketIds.length > 1) {
-            socketIds.forEach(id => fatalities.add(id));
+            // Find invincible players in this collision
+            const invincibleIds = socketIds.filter(id => hasActivePowerup(state.players[id], 'invincible'));
+            
+            if (invincibleIds.length > 0) {
+                // Invincible players survive, others die
+                socketIds.forEach(id => {
+                    if (!invincibleIds.includes(id)) {
+                        fatalities.add(id);
+                    }
+                });
+            } else {
+                // No invincible players - all die
+                socketIds.forEach(id => fatalities.add(id));
+            }
         }
     });
 
-    // --- 2. Check Head-to-Body/Wall Collisions (and other snake heads) ---
+    // --- 2. Check Head-to-Body/Wall Collisions ---
     activePlayerHeads.forEach(head => {
-        // Check map boundaries
-        if (head.x < 0 || head.x >= state.gridSize || head.y < 0 || head.y >= state.gridSize) {
-            fatalities.add(head.socketId);
-            return;
+        const attackingPlayer = state.players[head.socketId];
+        
+        // Invincible players ignore boundaries
+        if (!hasActivePowerup(attackingPlayer, 'invincible')) {
+            // Check map boundaries
+            if (head.x < 0 || head.x >= state.gridSize || head.y < 0 || head.y >= state.gridSize) {
+                fatalities.add(head.socketId);
+                return;
+            }
         }
         
-        // Check collision against all snake bodies (excluding simultaneous head-on hits already caught)
+        // Check collision against all snake bodies
+        // checkBodyCollision already handles invincible attacker logic
         if (checkBodyCollision(head, state)) {
             fatalities.add(head.socketId);
         }
@@ -168,6 +210,26 @@ function updateGameState(roomCode) {
     const state = gameStates[roomCode];
     if (!state || state.gameState !== 'playing') return false;
 
+    // SPEED BOOST: Process speed-boosted players twice per tick
+    const speedBoostedPlayers = Object.values(state.players)
+        .filter(p => p.isAlive && hasActivePowerup(p, 'speed_boost'))
+        .map(p => p.socketId);
+    
+    // First tick (all players including speed-boosted)
+    const firstTickResult = processSingleTick(roomCode, state);
+    if (firstTickResult.isGameOver) return true;
+    
+    // Second tick (only speed-boosted players)
+    if (speedBoostedPlayers.length > 0) {
+        const secondTickResult = processSingleTick(roomCode, state, speedBoostedPlayers);
+        if (secondTickResult.isGameOver) return true;
+    }
+    
+    return false;
+}
+
+// Process a single game tick (all players or subset)
+function processSingleTick(roomCode, state, onlyPlayerIds = null) {
     // A Set to track players that died this tick
     const diedThisTick = new Set();
     let isGameOver = false;
@@ -176,13 +238,11 @@ function updateGameState(roomCode) {
     Object.keys(state.players).forEach(playerId => {
         const player = state.players[playerId];
         if (!player.isAlive) return;
+        if (onlyPlayerIds && !onlyPlayerIds.includes(playerId)) return;
+        
         const nextX = player.snake[0].x + player.direction.x;
         const nextY = player.snake[0].y + player.direction.y;
         
-        // Note: Map wrapping is NOT applied here, letting collision detection handle walls/edges naturally.
-        // The checkBodyCollision is simpler if we let it handle the collision and apply death.
-        // However, since we are handling boundary collision in detectFatalCollisions, we should calculate 
-        // the wrapped position here to correctly check for internal body collisions.
         let wrappedX = nextX % state.gridSize; if (wrappedX < 0) wrappedX += state.gridSize;
         let wrappedY = nextY % state.gridSize; if (wrappedY < 0) wrappedY += state.gridSize;
         
@@ -192,10 +252,13 @@ function updateGameState(roomCode) {
     // 2. Pass 2: Detect ALL Fatal Collisions simultaneously
     const fatalities = detectFatalCollisions(state);
     
-    // 3. Pass 3: Apply movement, food, and deaths
+    // 3. Pass 3: Apply movement, food, powerups, and deaths
+    let foodWasEaten = false;
+    
     Object.keys(state.players).forEach(playerId => {
         const player = state.players[playerId];
         if (!player.isAlive) return;
+        if (onlyPlayerIds && !onlyPlayerIds.includes(playerId)) return;
         
         // Check if player died in the collision detection phase
         if (fatalities.has(playerId)) {
@@ -212,7 +275,9 @@ function updateGameState(roomCode) {
         // Check for food
         if (checkFood(newHead, state)) {
             player.score += 1;
-            // generate new food not overlapping any snake
+            foodWasEaten = true;
+            
+            // Generate new food not overlapping any snake
             let newFood, overlap;
             do {
                 overlap = false;
@@ -224,8 +289,27 @@ function updateGameState(roomCode) {
             // Remove tail if no food was eaten
             player.snake.pop();
         }
+        
+        // Check for powerup collection (only on first tick, not speed boost extra tick)
+        if (!onlyPlayerIds) {
+            const collectedPowerup = checkPowerupCollection(newHead, roomCode);
+            if (collectedPowerup) {
+                applyPowerupToPlayer(player, collectedPowerup.type);
+            }
+        }
+        
         delete player.nextHead;
     });
+    
+    // Try to spawn powerup if food was eaten (only on first tick)
+    if (!onlyPlayerIds && foodWasEaten) {
+        trySpawnPowerup(roomCode, state.gridSize, state.players, state.food);
+    }
+    
+    // Update all player powerups (remove expired effects) - only on first tick
+    if (!onlyPlayerIds) {
+        updatePlayerPowerups(state.players);
+    }
 
     const activePlayers = Object.values(state.players).filter(p => p.isAlive).length;
     if (activePlayers <= 1) {
@@ -239,7 +323,7 @@ function updateGameState(roomCode) {
         isGameOver = true;
     }
 
-    return isGameOver;
+    return { isGameOver, diedThisTick };
 }
 
 module.exports = {
@@ -250,4 +334,5 @@ module.exports = {
     initPlayer,
     createGameState,
     updateGameState,
+    cleanupPowerupsForRoom,
 };
