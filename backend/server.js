@@ -133,6 +133,7 @@ function checkCollision(head, state) {
     // 2. Other Snake Collision (checks active and stationary bodies)
     for (const playerId of playerKeys) {
         const otherSnake = players[playerId].snake;
+        if (!players[playerId].isAlive) continue; // Skip dead snakes
         // Check collision against the whole body of every other snake
         for (let i = 0; i < otherSnake.length; i++) {
             // Skip checking our own head against itself
@@ -244,6 +245,16 @@ function updateGameState(roomCode) {
         clearInterval(gameIntervals[roomCode]);
         delete gameIntervals[roomCode];
     }
+
+    // Also end the game if the time limit has been reached
+    if (!isGameOver && state.endTime && Date.now() >= state.endTime) {
+        state.gameState = 'gameover';
+        isGameOver = true;
+        if (gameIntervals[roomCode]) {
+            clearInterval(gameIntervals[roomCode]);
+            delete gameIntervals[roomCode];
+        }
+    }
     
     return isGameOver;
 }
@@ -274,6 +285,12 @@ io.on('connection', (socket) => {
         const hostName = data && data.name ? data.name : 'Player';
         let gridSize = Math.max(10, Math.min(60, requestedSize));
         gridSize = Math.floor(gridSize / 10) * 10; // Ensure multiple of 10
+
+        // Extract and validate game duration (seconds)
+        const DEFAULT_DURATION_SECONDS = 120; // 2 minutes
+        const requestedDuration = (data && data.durationSeconds) ? parseInt(data.durationSeconds, 10) : DEFAULT_DURATION_SECONDS;
+        // Bound duration between 10s and 3600s (1 hour)
+        const durationSeconds = Math.max(10, Math.min(3600, requestedDuration));
         
         if (typeof callback !== 'function') {
              console.error('Callback function is missing in createRoom event.');
@@ -287,6 +304,8 @@ io.on('connection', (socket) => {
         }
 
         const state = createGameState(roomCode, socket.id, gridSize, hostName);
+        // Attach chosen game duration (seconds)
+        state.gameDurationSeconds = durationSeconds;
         gameStates[roomCode] = state;
         socket.join(roomCode);
         
@@ -358,6 +377,10 @@ io.on('connection', (socket) => {
         }
 
         state.gameState = 'playing';
+        // Set end time if a duration is configured
+        if (state.gameDurationSeconds && Number.isFinite(state.gameDurationSeconds)) {
+            state.endTime = Date.now() + state.gameDurationSeconds * 1000;
+        }
         console.log(`Game started in room ${roomCode}`);
         
         // Start the game loop (e.g., 8 FPS)
@@ -407,6 +430,8 @@ io.on('connection', (socket) => {
             gridSize: state.gridSize,
             players: newPlayers,
             food: generateFood(state.gridSize),
+            // Keep the previous duration when resetting
+            gameDurationSeconds: state.gameDurationSeconds || 120,
         };
 
         gameStates[roomCode] = newState;
@@ -452,6 +477,8 @@ io.on('connection', (socket) => {
             }
             
             // Broadcast update
+            // Remove endTime if the room is now waiting or empty
+            if (state.gameState !== 'playing') delete state.endTime;
             io.to(roomToClean).emit('gameState', state);
         }
     });

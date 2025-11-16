@@ -40,6 +40,13 @@
             <p class="text-xs text-slate-400">The canvas will dynamically scale to fit this size.</p>
         </div>
 
+        <!-- Game Duration Input -->
+        <div class="space-y-2 p-4 bg-slate-700 rounded-lg">
+            <label for="game-duration-input" class="block font-semibold">Game Length (minutes)</label>
+            <input type="number" id="game-duration-input" class="input-field" value="2" min="0.1" max="60" step="0.5" placeholder="Duration in minutes">
+            <p class="text-xs text-slate-400">Game ends when timer reaches zero (or everyone dies).</p>
+        </div>
+
         <button id="create-room-btn" class="btn-primary w-full shadow-lg shadow-blue-500/50">
             Create New Room
         </button>
@@ -84,6 +91,7 @@
             <!-- Scoreboard -->
             <div class="lg:w-1/4 bg-slate-700 p-4 rounded-lg shadow-inner">
                 <h3 class="text-xl font-bold mb-3 text-blue-300">Scores</h3>
+                <div id="timer-display" class="text-center text-lg font-semibold text-slate-200 mb-3">Time: --:--</div>
                 <div id="score-board" class="space-y-2">
                     <!-- Scores populated by JS -->
                 </div>
@@ -151,6 +159,7 @@ const screens = {
 
 const roomCodeInput = document.getElementById('room-code-input');
 const gridSizeInput = document.getElementById('grid-size-input'); // NEW REF
+const durationInput = document.getElementById('game-duration-input'); // minutes input
 const roomCodeDisplay = document.getElementById('room-code-display');
 const playerList = document.getElementById('player-list');
 const scoreBoard = document.getElementById('score-board');
@@ -163,6 +172,8 @@ const createRoomBtn = document.getElementById('create-room-btn');
 const joinRoomBtn = document.getElementById('join-room-btn');
 const startGameBtn = document.getElementById('start-game-btn');
 const playAgainBtn = document.getElementById('play-again-btn');
+const timerDisplay = document.getElementById('timer-display');
+let timerIntervalId = null;
 
 // --- UI/Helper Functions ---
 
@@ -220,6 +231,8 @@ function connectToServer() {
             case 'waiting':
                 showScreen('waiting');
                 updateWaitingRoomUI(state.players, state.hostId);
+                // Clear any running client timer while waiting
+                clearClientTimer();
                 break;
             case 'playing':
                 showScreen('game');
@@ -227,10 +240,20 @@ function connectToServer() {
                 resizeCanvas(); 
                 updateScoreboard(state.players);
                 drawGame();
+                // If server provided an endTime, start a local countdown display
+                if (state.endTime) {
+                    startClientTimer(state.endTime);
+                } else {
+                    // No timer configured
+                    clearClientTimer();
+                    if (timerDisplay) timerDisplay.textContent = 'Time: --:--';
+                }
                 break;
             case 'gameover':
                 showScreen('gameover');
                 updateFinalScores(state.players);
+                // Clear countdown on game over
+                clearClientTimer();
                 break;
         }
     });
@@ -248,8 +271,12 @@ function handleCreateRoom() {
     
     createRoomBtn.disabled = true;
     
-    // Send the desired grid size to the server
-    socket.emit('createRoom', { gridSize: gridSize, name }, (response) => {
+    // Read duration (minutes) and convert to seconds
+    const durationMinutes = parseFloat(durationInput.value);
+    const durationSeconds = Math.max(10, Math.min(3600, Math.floor((isNaN(durationMinutes) ? 2 : durationMinutes) * 60)));
+
+    // Send the desired grid size and duration to the server
+    socket.emit('createRoom', { gridSize: gridSize, durationSeconds: durationSeconds, name}, (response) => {
         createRoomBtn.disabled = false;
         if (response.success) {
             currentRoomCode = response.roomCode;
@@ -481,6 +508,38 @@ function updateFinalScores(players) {
         playAgainBtn.classList.remove('hidden');
     } else {
         playAgainBtn.classList.add('hidden');
+    }
+}
+
+// --- Timer helpers (client) ---
+function formatTimeSeconds(sec) {
+    if (sec <= 0) return '00:00';
+    const minutes = Math.floor(sec / 60);
+    const seconds = sec % 60;
+    return `${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}`;
+}
+
+function startClientTimer(endTime) {
+    clearClientTimer();
+    if (!timerDisplay) return;
+    function tick() {
+        const remainingMs = endTime - Date.now();
+        const remainingSec = Math.ceil(remainingMs / 1000);
+        if (remainingSec <= 0) {
+            timerDisplay.textContent = 'Time: 00:00';
+            clearClientTimer();
+            return;
+        }
+        timerDisplay.textContent = 'Time: ' + formatTimeSeconds(remainingSec);
+    }
+    tick();
+    timerIntervalId = setInterval(tick, 1000);
+}
+
+function clearClientTimer() {
+    if (timerIntervalId) {
+        clearInterval(timerIntervalId);
+        timerIntervalId = null;
     }
 }
 
