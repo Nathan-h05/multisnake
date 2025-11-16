@@ -20,7 +20,26 @@ function getAvailableColor(players) {
 }
 
 function generateFood(gridSize) {
-    return { x: Math.floor(Math.random() * gridSize), y: Math.floor(Math.random() * gridSize) };
+    const x = Math.floor(Math.random() * gridSize);
+    const y = Math.floor(Math.random() * gridSize);
+
+    // 80% normal food, 10% double-score, 10% speed-boost
+    const r = Math.random();
+    let type = 'normal';
+    let grow = true;      // whether eating this increases snake length
+    let score = 1;        // how many points
+
+    if (r > 0.8 && r <= 0.9) {
+        type = 'doubleScore';
+        score = 2;
+        grow = true;      // still grows
+    } else if (r > 0.9) {
+        type = 'speedBoost';
+        score = 1;
+        grow = false;     // no extra length, just buff
+    }
+
+    return { x, y, type, grow, score };
 }
 
 function initPlayer(socketId, color, gridSize, playerIndex, name) {
