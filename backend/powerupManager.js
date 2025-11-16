@@ -157,12 +157,12 @@ function trySpawnPowerup(roomCode, gridSize, players, food) {
 
     const type = selectRandomPowerupType();
     const powerup = {
-        id: `${type.id}_${now}_${Math.random()}`,
+        ...type, // include color, emoji, name, duration, spawnWeight for client rendering
+        id: `${type.id}_${now}_${Math.random()}`, // unique ID overwrites type.id
         type: type.id,
         x: position.x,
         y: position.y,
-        spawnTime: now,
-        ...type // include color, emoji, name for client rendering
+        spawnTime: now
     };
 
     roomPowerups.powerups.push(powerup);

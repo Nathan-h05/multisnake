@@ -83,13 +83,13 @@ function drawPowerup(ctx, powerup, tileSize) {
 
     if (powerup.type === 'invincible') {
         // Gold glowing circle
-        const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius * 1.5);
+        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, radius * 1.5);
         gradient.addColorStop(0, 'rgba(251, 191, 36, 0.8)');
         gradient.addColorStop(0.5, 'rgba(251, 191, 36, 0.4)');
         gradient.addColorStop(1, 'rgba(251, 191, 36, 0)');
         ctx.fillStyle = gradient;
         ctx.beginPath();
-        ctx.arc(cx, cy, radius * 1.5, 0, Math.PI * 2);
+        ctx.arc(0, 0, radius * 1.5, 0, Math.PI * 2);
         ctx.fill();
 
         // Star shape
@@ -97,8 +97,8 @@ function drawPowerup(ctx, powerup, tileSize) {
         ctx.beginPath();
         for (let i = 0; i < 5; i++) {
             const angle = (i * 4 * Math.PI) / 5 - Math.PI / 2;
-            const x = cx + Math.cos(angle) * radius;
-            const y = cy + Math.sin(angle) * radius;
+            const x = Math.cos(angle) * radius;
+            const y = Math.sin(angle) * radius;
             if (i === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
         }
@@ -108,17 +108,17 @@ function drawPowerup(ctx, powerup, tileSize) {
         // Highlight
         ctx.fillStyle = 'rgba(255,255,255,0.5)';
         ctx.beginPath();
-        ctx.arc(cx - radius * 0.2, cy - radius * 0.2, radius * 0.3, 0, Math.PI * 2);
+        ctx.arc(-radius * 0.2, -radius * 0.2, radius * 0.3, 0, Math.PI * 2);
         ctx.fill();
     } else if (powerup.type === 'speed_boost') {
         // Blue glowing circle
-        const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius * 1.5);
+        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, radius * 1.5);
         gradient.addColorStop(0, 'rgba(59, 130, 246, 0.8)');
         gradient.addColorStop(0.5, 'rgba(59, 130, 246, 0.4)');
         gradient.addColorStop(1, 'rgba(59, 130, 246, 0)');
         ctx.fillStyle = gradient;
         ctx.beginPath();
-        ctx.arc(cx, cy, radius * 1.5, 0, Math.PI * 2);
+        ctx.arc(0, 0, radius * 1.5, 0, Math.PI * 2);
         ctx.fill();
 
         // Lightning bolt
@@ -126,19 +126,19 @@ function drawPowerup(ctx, powerup, tileSize) {
         ctx.beginPath();
         const boltWidth = radius * 0.8;
         const boltHeight = radius * 1.4;
-        ctx.moveTo(cx + boltWidth * 0.1, cy - boltHeight * 0.5);
-        ctx.lineTo(cx - boltWidth * 0.3, cy);
-        ctx.lineTo(cx + boltWidth * 0.1, cy);
-        ctx.lineTo(cx - boltWidth * 0.1, cy + boltHeight * 0.5);
-        ctx.lineTo(cx + boltWidth * 0.3, cy);
-        ctx.lineTo(cx - boltWidth * 0.1, cy);
+        ctx.moveTo(boltWidth * 0.1, -boltHeight * 0.5);
+        ctx.lineTo(-boltWidth * 0.3, 0);
+        ctx.lineTo(boltWidth * 0.1, 0);
+        ctx.lineTo(-boltWidth * 0.1, boltHeight * 0.5);
+        ctx.lineTo(boltWidth * 0.3, 0);
+        ctx.lineTo(-boltWidth * 0.1, 0);
         ctx.closePath();
         ctx.fill();
 
         // Highlight
         ctx.fillStyle = 'rgba(255,255,255,0.5)';
         ctx.beginPath();
-        ctx.arc(cx - radius * 0.2, cy - radius * 0.3, radius * 0.25, 0, Math.PI * 2);
+        ctx.arc(-radius * 0.2, -radius * 0.3, radius * 0.25, 0, Math.PI * 2);
         ctx.fill();
     } else if (powerup.type === 'multiplier') {
         // Green GEM (diamond + shine)
